@@ -1,0 +1,8 @@
+[package]
+name = "platforming"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+minifb = "0.28.0"
+png = "0.17.16"
