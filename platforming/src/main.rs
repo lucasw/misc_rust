@@ -15,16 +15,20 @@ fn png_to_sprite(filename: &str) -> Sprite {
     let mut reader = decoder.read_info().unwrap();
     let info = reader.info();
     println!("indexed level: {:?}", info);
-    println!("tiles: {}, buffer size in bytes: {}", info.width * info.height, reader.output_buffer_size());
+    println!(
+        "tiles: {}, buffer size in bytes: {}",
+        info.width * info.height,
+        reader.output_buffer_size()
+    );
     let mut buffer = vec![0u32; reader.output_buffer_size() / 4];
 
-    let mut u8_buffer = unsafe {
+    let u8_buffer = unsafe {
         std::slice::from_raw_parts_mut(
             buffer.as_mut_ptr() as *mut u8,
             buffer.len() * std::mem::size_of::<u32>(),
         )
     };
-    reader.next_frame(&mut u8_buffer).unwrap();
+    reader.next_frame(u8_buffer).unwrap();
 
     let mut argb_buffer = Vec::new();
     // convert RGBA buffer read by the reader to an ARGB buffer as expected by minifb.
@@ -57,7 +61,7 @@ fn draw_pixel(sprite: &mut Sprite, x: i32, y: i32, color: u32) {
         return;
     }
     let dest_ind = (y * sprite.width as i32 + x) as usize;
-    sprite.argb[dest_ind] = 0xffee00ff;
+    sprite.argb[dest_ind] = color;
 }
 
 // draw sprite into buffer at location
@@ -92,7 +96,13 @@ fn draw_sprite(sprite: &Sprite, sprite_x: i32, sprite_y: i32, screen: &mut Sprit
 }
 
 // TODO(lucasw) level struct
-fn get_tile_type(level_bytes: &[u8], level_width: u32, level_height: u32, tile_x: u32, tile_y: u32) -> u8 {
+fn get_tile_type(
+    level_bytes: &[u8],
+    level_width: u32,
+    level_height: u32,
+    tile_x: u32,
+    tile_y: u32,
+) -> u8 {
     if tile_x >= level_width {
         return 0;
     }
@@ -107,8 +117,15 @@ fn get_tile_type(level_bytes: &[u8], level_width: u32, level_height: u32, tile_x
     level_bytes[ind] & mask
 }
 
-fn get_tile_type_level_coords(level_bytes: &[u8], level_width: u32, level_height: u32,
-    tile_width: usize, tile_height: usize, x: i32, y: i32) -> u8 {
+fn get_tile_type_level_coords(
+    level_bytes: &[u8],
+    level_width: u32,
+    level_height: u32,
+    tile_width: usize,
+    tile_height: usize,
+    x: i32,
+    y: i32,
+) -> u8 {
     if x < 0 {
         return 0;
     }
@@ -211,7 +228,12 @@ fn main() {
         argb: vec![0u32; 320 * 200],
     };
 
-    println!("{} x {} = {} pixels", screen.width, screen.height, screen.argb.len());
+    println!(
+        "{} x {} = {} pixels",
+        screen.width,
+        screen.height,
+        screen.argb.len()
+    );
 
     let mut window = Window::new(
         "platform game",
@@ -272,15 +294,12 @@ fn main() {
             }
 
             {
-                if window.is_key_down(Key::Up) {
-                    if player_on_ground {
-                        println!("jump");
-                        player_vy = -8.0;
-                        // nudge the player off the ground so it doesn't immediately re-intersect
-                        player_y -= 2.0;
-                        player_on_ground = false;
-                    }
-                    // println!("left");
+                if window.is_key_down(Key::Up) && player_on_ground {
+                    println!("jump");
+                    player_vy = -8.0;
+                    // nudge the player off the ground so it doesn't immediately re-intersect
+                    player_y -= 2.0;
+                    player_on_ground = false;
                 }
                 /* TODO(lucasw) crouch
                 if window.is_key_down(Key::Down) {
@@ -336,14 +355,17 @@ fn main() {
                         let div = level.wall_fg.height as f64;
                         player_y = (player_y / div).round() * div;
                     }
-                } else {
-                    if player_on_ground {
-                        println!("fell off edge");
-                        player_on_ground = false;
-                    }
+                } else if player_on_ground {
+                    println!("fell off edge");
+                    player_on_ground = false;
                 }
 
-                draw_sprite(&player, player_x - camera_x, player_y as i32 - camera_y, &mut screen);
+                draw_sprite(
+                    &player,
+                    player_x - camera_x,
+                    player_y as i32 - camera_y,
+                    &mut screen,
+                );
 
                 // debug test xy
                 {
@@ -354,7 +376,9 @@ fn main() {
             }
         }
 
-        window.update_with_buffer(&screen.argb, screen.width, screen.height).unwrap();
+        window
+            .update_with_buffer(&screen.argb, screen.width, screen.height)
+            .unwrap();
 
         // TODO(lucasw) sleep for remaining time left in loop, or slightly less than that,
         // and cpu load will be reduced?
