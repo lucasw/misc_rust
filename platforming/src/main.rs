@@ -285,7 +285,7 @@ impl Player {
                 actual_x_step = x_step;
             }
             for i in 0..4 {
-                let test_y = (self.y as i32) + ((i + 1) * self.sprite.height / 4) as i32 - 1;
+                let test_y = (self.y as i32) + ((i + 1) * self.sprite.height / 5) as i32 - 1;
                 let collided = level.is_collided(test_x, test_y);
                 if collided {
                     println!("left collide");
@@ -314,7 +314,9 @@ impl Player {
 
         if jump_pressed_rising && self.on_ground {
             println!("jump");
-            self.vy = -8.0;
+            // if this is too large the player can glitch through blocks, the collision response
+            // just rounds to nearest block before the current collision
+            self.vy = -16.0;
             // nudge the player off the ground so it doesn't immediately re-intersect
             self.y -= 2.0;
             self.on_ground = false;
@@ -330,7 +332,6 @@ impl Player {
         if self.on_ground {
             self.vy = 0.0;
         } else {
-            self.y += self.vy;
             // println!("y pos {self.y}, vel {self.vy}");
             self.vy += 0.25;
             if self.vy > 4.0 {
@@ -380,19 +381,42 @@ impl Player {
         // see if player has hit head on tile
         {
             let test_x = self.x + self.sprite.width as i32 / 2;
-            let test_y = (self.y as i32) - 1;
-            let collided = level.is_collided(test_x, test_y);
-            if collided {
-                self.viz_points.push((test_x, test_y, 0x00ff3300));
-                if !self.on_ground {
-                    println!("head bumped");
-                    self.vy = 0.0;
-                    let div = level.wall_fg.height as f64;
-                    self.y = ((self.y / div).round()) * div + 1.0;
+            let start_y = self.y as i32;
+            let end_y = (self.y + self.vy) as i32;
+            // let div = level.wall_fg.height as f64;
+
+            // TODO(lucasw) need same system for high speed falling
+            let mut dy = 0.0;
+            let step = 2;
+            let mut range = Vec::new();
+            if end_y >= start_y {
+                for y in ((start_y + 1)..=end_y).step_by(step) {
+                    range.push(y);
                 }
             } else {
-                self.viz_points.push((test_x, test_y, 0x0022ff33));
+                for y in (end_y..=(start_y + 1)).rev().step_by(step) {
+                    range.push(y);
+                }
             }
+            if !range.is_empty() {
+                println!("{range:?}");
+            }
+            for test_y in range {
+                let collided = level.is_collided(test_x, test_y - 1);
+                println!("{} {}, {dy} {test_x} {test_y} {collided}", self.y, self.vy);
+                if collided {
+                    self.viz_points.push((test_x, test_y, 0x00ff3300));
+                    if !self.on_ground {
+                        println!("head bumped");
+                        self.vy = 0.0;
+                        break;
+                    }
+                } else {
+                    dy = test_y as f64 - start_y as f64;
+                    self.viz_points.push((test_x, test_y, 0x0022ff33));
+                }
+            }
+            self.y += dy;
         }
     }
 
