@@ -265,18 +265,37 @@ impl Player {
         right_pressed: bool,
         jump_pressed: bool,
     ) {
-        if left_pressed {
-            self.x -= 2;
-            // println!("left");
+        if left_pressed ^ right_pressed {
+            let x_step = 2;
+            let mut actual_x_step;
+            // TODO(lucasw) queue up collision points to test and zero out
+            // left or right motion if any collide
+            let test_x;
+            if left_pressed {
+                test_x = self.x + 4 - x_step;
+                actual_x_step = -x_step;
+            } else {
+                // right_pressed
+                // see if player has hit block moving to right
+                test_x = self.x + self.sprite.width as i32 - 4 + x_step;
+                actual_x_step = x_step;
+            }
+            for i in 0..4 {
+                let test_y = (self.y as i32) + ((i + 1) * self.sprite.height / 4) as i32 - 1;
+                let collided = level.is_collided(test_x, test_y);
+                if collided {
+                    println!("left collide");
+                    actual_x_step = 0;
+                    break;
+                }
+            }
+            self.x += actual_x_step;
         }
-        if right_pressed {
-            self.x += 2;
-            // println!("right");
-        }
+
         // let min_x = -(self.width as i32);
         // let max_x = (screen.width + self.width) as i32;
         let min_x = 0;
-        let max_x = level.width as i32 * level.wall_fg.width as i32;
+        let max_x = level.width as i32 * level.wall_fg.width as i32 - 1;
         if self.x > max_x {
             self.x = max_x;
         }
