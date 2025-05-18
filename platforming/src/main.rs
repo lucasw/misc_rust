@@ -196,7 +196,7 @@ impl Level {
             test_x,
             test_y,
         );
-        return tile_type > 0
+        tile_type > 0
     }
 
     fn draw(&self, camera_x: i32, camera_y: i32, screen: &mut Sprite) {
@@ -234,6 +234,155 @@ impl Level {
     }
 }
 
+struct Player {
+    x: i32,
+    // TODO(lucasw) making this float to be able to fall fractional pixels, but
+    // it always needs to be rounded to nearest
+    y: f64,
+    sprite: Sprite,
+    on_ground: bool,
+    vy: f64,
+    jump_pressed_prev: bool,
+}
+
+impl Player {
+    fn new(x: i32, y: i32) -> Self {
+        let sprite = png_to_sprite("data/player.png");
+        Player {
+            x,
+            y: y as f64,
+            sprite,
+            on_ground: false,
+            vy: 0.0,
+            jump_pressed_prev: false,
+        }
+    }
+
+    fn update(
+        &mut self,
+        level: &Level,
+        left_pressed: bool,
+        right_pressed: bool,
+        jump_pressed: bool,
+    ) {
+        if left_pressed {
+            self.x -= 2;
+            // println!("left");
+        }
+        if right_pressed {
+            self.x += 2;
+            // println!("right");
+        }
+        // let min_x = -(self.width as i32);
+        // let max_x = (screen.width + self.width) as i32;
+        let min_x = 0;
+        let max_x = level.width as i32 * level.wall_fg.width as i32;
+        if self.x > max_x {
+            self.x = max_x;
+        }
+        if self.x < min_x {
+            self.x = min_x;
+        }
+
+        let jump_pressed_rising = jump_pressed && !self.jump_pressed_prev;
+        self.jump_pressed_prev = jump_pressed;
+
+        if jump_pressed_rising && self.on_ground {
+            println!("jump");
+            self.vy = -8.0;
+            // nudge the player off the ground so it doesn't immediately re-intersect
+            self.y -= 2.0;
+            self.on_ground = false;
+        }
+        /* TODO(lucasw) crouch
+           if window.is_key_down(Key::Down) {
+           self.y += 4;
+        // println!("crouch");
+        }
+        */
+        // println!("player {self.x} {self.y}, feet {test_x} {test_y} -> {tile_type} {self.on_ground}");
+
+        if self.on_ground {
+            self.vy = 0.0;
+        } else {
+            self.y += self.vy;
+            // println!("y pos {self.y}, vel {self.vy}");
+            self.vy += 0.25;
+            if self.vy > 4.0 {
+                self.vy = 4.0;
+            }
+        }
+        // self.y = self.y.round();
+
+        // let min_y = -(self.height as i32);
+        // let max_y = (screen.height + self.height) as i32;
+        let min_y = 0.0;
+        let max_y = (level.height as i32 * level.wall_fg.height as i32) as f64;
+        if self.y > max_y {
+            self.y = max_y;
+            self.vy = 0.0;
+            self.on_ground = true;
+            println!("landed on bottom edge of level");
+        }
+        if self.y < min_y {
+            self.y = min_y;
+            self.vy = 0.0;
+        }
+
+        // see if player is on ground
+        {
+            let test_x = self.x + self.sprite.width as i32 / 2;
+            let test_y = (self.y as i32) + self.sprite.height as i32;
+            let collided = level.is_collided(test_x, test_y);
+            if collided {
+                if !self.on_ground {
+                    println!("landed");
+                    self.on_ground = true;
+                    self.vy = 0.0;
+                    let div = level.wall_fg.height as f64;
+                    self.y = (self.y / div).round() * div;
+                }
+            } else if self.on_ground {
+                println!("fell off edge");
+                self.on_ground = false;
+            }
+
+            // TODO(lucasw) add test_x/y to debug viz queue
+        }
+
+        // see if player has hit head on tile
+        {
+            let test_x = self.x + self.sprite.width as i32 / 2;
+            let test_y = (self.y as i32) - 1;
+            let collided = level.is_collided(test_x, test_y);
+            if collided && !self.on_ground {
+                println!("head bumped");
+                self.vy = 0.0;
+                let div = level.wall_fg.height as f64;
+                self.y = ((self.y / div).round()) * div + 1.0;
+            }
+
+            // TODO(lucasw) add test_x/y to debug viz queue
+        }
+    }
+
+    fn draw(&self, camera_x: i32, camera_y: i32, dst_sprite: &mut Sprite) {
+        draw_sprite(
+            &self.sprite,
+            self.x - camera_x,
+            self.y as i32 - camera_y,
+            dst_sprite,
+        );
+
+        // debug viz xy
+        /* {
+            let test_screen_x = test_x - camera_x;
+            let test_screen_y = test_y - camera_y;
+            draw_pixel(&mut screen, test_screen_x, test_screen_y, 0xffee40ff);
+        } */
+    }
+}
+
 fn main() {
     let mut screen = Sprite {
         width: 320,
@@ -262,161 +411,74 @@ fn main() {
     .expect("unable to create window");
 
     let level = Level::new();
-
+    let mut player = Player::new(
+        68 * level.wall_fg.width as i32,
+        (level.height as i32 - 16) * level.wall_fg.height as i32,
+    );
     // TODO(lucasw) wrap in struct
-    let player = png_to_sprite("data/player.png");
-    let mut player_x = 68 * level.wall_fg.width as i32;
-    let mut player_y: f64 = ((level.height as i32 - 16) * level.wall_fg.height as i32) as f64;
-    let mut player_on_ground = false;
-    let mut player_vy = 0.0;
 
-    let mut jump_pressed_prev = false;
-
-    window.set_target_fps(60);
+    let fps = 60;
+    window.set_target_fps(fps);
+    let update_secs = 1.0 / fps as f64;
+    // let update_duration = std::time::Duration::from_millis((update_secs * 1000.0) as u64);
+    let update_duration = std::time::Duration::from_millis((update_secs * 1000.0 - 11.0) as u64);
     window.set_background_color(0, 0, 50);
 
-    // let mut count = 0;
+    let mut prev = std::time::Instant::now();
+    let mut count = 0;
     while window.is_open() && !window.is_key_down(Key::Escape) {
-        // count += 1;
+        let t0 = std::time::Instant::now();
 
         // TODO(lucasw) have the camera lag behind the player
-        let camera_x = player_x - (screen.width / 2) as i32;
-        let camera_y = player_y as i32 - (screen.height / 2) as i32;
+        let camera_x = player.x - (screen.width / 2) as i32;
+        let camera_y = player.y as i32 - (screen.height / 2) as i32;
 
         level.draw(camera_x, camera_y, &mut screen);
 
         // update player and screen position
         {
-            {
-                if window.is_key_down(Key::Left) {
-                    player_x -= 2;
-                    // println!("left");
-                }
-                if window.is_key_down(Key::Right) {
-                    player_x += 2;
-                    // println!("right");
-                }
-                // let min_x = -(player.width as i32);
-                // let max_x = (screen.width + player.width) as i32;
-                let min_x = 0;
-                let max_x = level.width as i32 * level.wall_fg.width as i32;
-                if player_x > max_x {
-                    player_x = max_x;
-                }
-                if player_x < min_x {
-                    player_x = min_x;
-                }
-            }
-
-            {
-                let jump_pressed = window.is_key_down(Key::Up);
-                let jump_pressed_rising = jump_pressed && !jump_pressed_prev;
-                jump_pressed_prev = jump_pressed;
-
-                if jump_pressed_rising && player_on_ground {
-                    println!("jump");
-                    player_vy = -8.0;
-                    // nudge the player off the ground so it doesn't immediately re-intersect
-                    player_y -= 2.0;
-                    player_on_ground = false;
-                }
-                /* TODO(lucasw) crouch
-                if window.is_key_down(Key::Down) {
-                    player_y += 4;
-                    // println!("crouch");
-                }
-                */
-                // println!("player {player_x} {player_y}, feet {test_x} {test_y} -> {tile_type} {player_on_ground}");
-
-                if player_on_ground {
-                    player_vy = 0.0;
-                } else {
-                    player_y += player_vy;
-                    println!("y pos {player_y}, vel {player_vy}");
-                    player_vy += 0.25;
-                    if player_vy > 4.0 {
-                        player_vy = 4.0;
-                    }
-                }
-                // player_y = player_y.round();
-
-                // let min_y = -(player.height as i32);
-                // let max_y = (screen.height + player.height) as i32;
-                let min_y = 0.0;
-                let max_y = (level.height as i32 * level.wall_fg.height as i32) as f64;
-                if player_y > max_y {
-                    player_y = max_y;
-                    player_vy = 0.0;
-                    player_on_ground = true;
-                    println!("landed on bottom edge of level");
-                }
-                if player_y < min_y {
-                    player_y = min_y;
-                    player_vy = 0.0;
-                }
-
-                // see if player is on ground
-                {
-                    let test_x = player_x + player.width as i32 / 2;
-                    let test_y = (player_y as i32) + player.height as i32;
-                    let collided = level.is_collided(test_x, test_y);
-                    if collided {
-                        if !player_on_ground {
-                            println!("landed");
-                            player_on_ground = true;
-                            player_vy = 0.0;
-                            let div = level.wall_fg.height as f64;
-                            player_y = (player_y / div).round() * div;
-                        }
-                    } else if player_on_ground {
-                        println!("fell off edge");
-                        player_on_ground = false;
-                    }
-
-                    // debug viz xy
-                    {
-                        let test_screen_x = test_x - camera_x;
-                        let test_screen_y = test_y - camera_y;
-                        draw_pixel(&mut screen, test_screen_x, test_screen_y, 0xffee00ff);
-                    }
-                }
-
-                // see if player has hit head on tile
-                {
-                    let test_x = player_x + player.width as i32 / 2;
-                    let test_y = (player_y as i32) - 1;
-                    let collided = level.is_collided(test_x, test_y);
-                    if collided {
-                        if !player_on_ground {
-                            println!("head bumped");
-                            player_vy = 0.0;
-                            let div = level.wall_fg.height as f64;
-                            player_y = ((player_y / div).round()) * div + 1.0;
-                        }
-                    }
-
-                    // debug viz xy
-                    {
-                        let test_screen_x = test_x - camera_x;
-                        let test_screen_y = test_y - camera_y;
-                        draw_pixel(&mut screen, test_screen_x, test_screen_y, 0xffee40ff);
-                    }
-                }
-
-                draw_sprite(
-                    &player,
-                    player_x - camera_x,
-                    player_y as i32 - camera_y,
-                    &mut screen,
-                );
-            }
+            let left_pressed = window.is_key_down(Key::Left);
+            let right_pressed = window.is_key_down(Key::Right);
+            let jump_pressed = window.is_key_down(Key::Up);
+            player.update(&level, left_pressed, right_pressed, jump_pressed);
+            player.draw(camera_x, camera_y, &mut screen);
         }
 
+        let t1 = std::time::Instant::now();
+        let tdiff0 = t1 - t0;
+
+        // TODO(lucasw) need to sleep for remaining time otherwise busywaiting for 1.0/fps in
+        // window update?
+        // No that just slows down the fps, not sure where all the cpu usage is happening,
+        if update_duration > tdiff0 {
+            let remaining_duration = update_duration - tdiff0;
+            if count % 60 == 0 {
+                println!("remaining {remaining_duration:?}, used {tdiff0:?}");
+            }
+            std::thread::sleep(remaining_duration);
+        } else {
+            println!("{tdiff0:?} > {update_duration:?}");
+        }
+
+        let t1 = std::time::Instant::now();
+
+        // TODO(lucasw) this does appear to round up to remaining time, but also takes 10 ms or so
+        // itself?  It appears to be the cost of copying the buffer, though it should be smaller
+        // than 10ms
         window
             .update_with_buffer(&screen.argb, screen.width, screen.height)
             .unwrap();
+        // window.update();
 
-        // TODO(lucasw) sleep for remaining time left in loop, or slightly less than that,
-        // and cpu load will be reduced?
+        let t2 = std::time::Instant::now();
+        let tdiff1 = t2 - t1;
+        if count % 60 == 0 {
+            println!(
+                "game update time: {tdiff0:?}, window update time: {tdiff1:?}, loop elapsed {:?}",
+                t0 - prev
+            );
+        }
+        prev = t0;
+        count += 1;
     }
 }
