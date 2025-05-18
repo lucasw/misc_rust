@@ -120,6 +120,90 @@ fn get_tile_type_level_coords(level_bytes: &[u8], level_width: u32, level_height
     get_tile_type(level_bytes, level_width, level_height, tile_x, tile_y)
 }
 
+struct Level {
+    width: u32,
+    height: u32,
+    tiles: Vec<u8>,
+    wall_fg: Sprite,
+    background: Sprite,
+}
+
+impl Level {
+    fn new() -> Self {
+        let wall_bg = png_to_sprite("data/wall_bg.png");
+        let wall_fg = png_to_sprite("data/wall.png");
+
+        let (level_bytes, level_width, level_height) = {
+            // TODO(lucasw) this is a indexed png, don't want it as [u32] but not sure how to get it
+            // let level = png_to_sprite("data/level00.png");
+            // println!("{level:?}");
+            let filename = "data/level00.png";
+            let decoder = Decoder::new(File::open(filename).unwrap());
+            // this causess indexed/paletted images to be expanded
+            // decoder.set_transformations(Transformations::ALPHA);
+            let mut reader = decoder.read_info().unwrap();
+            let info = reader.info();
+            // TODO(lucasw) check that the image actually is indexed
+            println!("indexed level: {:?}", info);
+            let width = info.width;
+            let height = info.height;
+            println!(
+                "tiles: {}, buffer size: {}",
+                info.width * info.height,
+                reader.output_buffer_size()
+            );
+            let mut buffer = vec![0u8; reader.output_buffer_size()];
+            // even though there is 1 bit-per-pixel this reads out into a u32 per pixel
+            let rv = reader.next_frame(&mut buffer).unwrap();
+            println!("{rv:?}");
+            // println!("{buffer:?}");
+            (buffer, width, height)
+        };
+
+        Level {
+            width: level_width,
+            height: level_height,
+            tiles: level_bytes,
+            wall_fg,
+            background: wall_bg,
+        }
+    }
+
+    fn draw(&self, camera_x: i32, camera_y: i32, screen: &mut Sprite) {
+        // TODO(lucasw) invert this, instead of looping over every tile in the map, loop over
+        // every tile in the screen and look up in map
+        for tile_y in 0..self.height {
+            for tile_x in 0..self.width {
+                let screen_x = tile_x as i32 * self.wall_fg.width as i32 - camera_x;
+                if screen_x < -(self.wall_fg.width as i32) {
+                    continue;
+                }
+                if screen_x > screen.width as i32 {
+                    continue;
+                }
+
+                let screen_y = tile_y as i32 * self.wall_fg.height as i32 - camera_y;
+                if screen_y < -(self.wall_fg.height as i32) {
+                    continue;
+                }
+                if screen_y > screen.height as i32 {
+                    continue;
+                }
+
+                let tile_type = get_tile_type(&self.tiles, self.width, self.height, tile_x, tile_y);
+                let tile = {
+                    if tile_type > 0 {
+                        &self.wall_fg
+                    } else {
+                        &self.background
+                    }
+                };
+                draw_sprite(tile, screen_x, screen_y, screen);
+            }
+        }
+    }
+}
+
 fn main() {
     let mut screen = Sprite {
         width: 320,
@@ -142,36 +226,12 @@ fn main() {
     )
     .expect("unable to create window");
 
-    let wall_bg = png_to_sprite("data/wall_bg.png");
-    let wall_fg = png_to_sprite("data/wall.png");
-
-    let (level_bytes, level_width, level_height) = {
-        // TODO(lucasw) this is a indexed png, don't want it as [u32] but not sure how to get it
-        // let level = png_to_sprite("data/level00.png");
-        // println!("{level:?}");
-        let filename = "data/level00.png";
-        let mut decoder = Decoder::new(File::open(filename).unwrap());
-        // this causess indexed/paletted images to be expanded
-        // decoder.set_transformations(Transformations::ALPHA);
-        let mut reader = decoder.read_info().unwrap();
-        let info = reader.info();
-        // TODO(lucasw) check that the image actually is indexed
-        println!("indexed level: {:?}", info);
-        let width = info.width;
-        let height = info.height;
-        println!("tiles: {}, buffer size: {}", info.width * info.height, reader.output_buffer_size());
-        let mut buffer = vec![0u8; reader.output_buffer_size()];
-        // even though there is 1 bit-per-pixel this reads out into a u32 per pixel
-        let rv = reader.next_frame(&mut buffer).unwrap();
-        println!("{rv:?}");
-        // println!("{buffer:?}");
-        (buffer, width, height)
-    };
+    let level = Level::new();
 
     // TODO(lucasw) wrap in struct
     let player = png_to_sprite("data/player.png");
-    let mut player_x = 16 * wall_fg.width as i32;
-    let mut player_y: f64 = ((level_height as i32 - 16) * wall_fg.height as i32) as f64;
+    let mut player_x = 16 * level.wall_fg.width as i32;
+    let mut player_y: f64 = ((level.height as i32 - 16) * level.wall_fg.height as i32) as f64;
     let mut player_on_ground = false;
     let mut player_vy = 0.0;
 
@@ -186,40 +246,7 @@ fn main() {
         let camera_x = player_x - (screen.width / 2) as i32;
         let camera_y = player_y as i32 - (screen.height / 2) as i32;
 
-        // draw the level
-        {
-            // TODO(lucasw) invert this, instead of looping over every tile in the map, loop over
-            // every tile in the screen and look up in map
-            for tile_y in 0..level_height {
-                for tile_x in 0..level_width {
-                    let screen_x = tile_x as i32 * wall_fg.width as i32 - camera_x as i32;
-                    if screen_x < -(wall_fg.width as i32) {
-                        continue;
-                    }
-                    if screen_x > screen.width as i32 {
-                        continue;
-                    }
-
-                    let screen_y = tile_y as i32 * wall_fg.height as i32 - camera_y as i32;
-                    if screen_y < -(wall_fg.height as i32) {
-                        continue;
-                    }
-                    if screen_y > screen.height as i32 {
-                        continue;
-                    }
-
-                    let tile_type = get_tile_type(&level_bytes, level_width, level_height, tile_x, tile_y);
-                    let tile = {
-                        if tile_type > 0 {
-                            &wall_fg
-                        } else {
-                            &wall_bg
-                        }
-                    };
-                    draw_sprite(tile, screen_x, screen_y, &mut screen);
-                }
-            }
-        }
+        level.draw(camera_x, camera_y, &mut screen);
 
         // update player and screen position
         {
@@ -235,8 +262,8 @@ fn main() {
                 // let min_x = -(player.width as i32);
                 // let max_x = (screen.width + player.width) as i32;
                 let min_x = 0;
-                let max_x = level_width as i32 * wall_fg.width as i32;
-                if player_x > max_x{
+                let max_x = level.width as i32 * level.wall_fg.width as i32;
+                if player_x > max_x {
                     player_x = max_x;
                 }
                 if player_x < min_x {
@@ -278,7 +305,7 @@ fn main() {
                 // let min_y = -(player.height as i32);
                 // let max_y = (screen.height + player.height) as i32;
                 let min_y = 0.0;
-                let max_y = (level_height as i32 * wall_fg.height as i32) as f64;
+                let max_y = (level.height as i32 * level.wall_fg.height as i32) as f64;
                 if player_y > max_y {
                     player_y = max_y;
                     player_vy = 0.0;
@@ -292,14 +319,21 @@ fn main() {
 
                 let test_x = player_x + player.width as i32 / 2;
                 let test_y = (player_y as i32) + player.height as i32;
-                let tile_type = get_tile_type_level_coords(&level_bytes, level_width, level_height,
-                    wall_fg.width, wall_fg.height, test_x, test_y);
+                let tile_type = get_tile_type_level_coords(
+                    &level.tiles,
+                    level.width,
+                    level.height,
+                    level.wall_fg.width,
+                    level.wall_fg.height,
+                    test_x,
+                    test_y,
+                );
                 if tile_type > 0 {
                     if !player_on_ground {
                         println!("landed");
                         player_on_ground = true;
                         player_vy = 0.0;
-                        let div = wall_fg.height as f64;
+                        let div = level.wall_fg.height as f64;
                         player_y = (player_y / div).round() * div;
                     }
                 } else {
