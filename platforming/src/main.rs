@@ -257,6 +257,8 @@ fn main() {
     let mut player_on_ground = false;
     let mut player_vy = 0.0;
 
+    let mut jump_pressed_prev = false;
+
     window.set_target_fps(60);
     window.set_background_color(0, 0, 50);
 
@@ -294,7 +296,11 @@ fn main() {
             }
 
             {
-                if window.is_key_down(Key::Up) && player_on_ground {
+                let jump_pressed = window.is_key_down(Key::Up);
+                let jump_pressed_rising = jump_pressed && !jump_pressed_prev;
+                jump_pressed_prev = jump_pressed;
+
+                if jump_pressed_rising && player_on_ground {
                     println!("jump");
                     player_vy = -8.0;
                     // nudge the player off the ground so it doesn't immediately re-intersect
