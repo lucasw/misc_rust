@@ -186,6 +186,19 @@ impl Level {
         }
     }
 
+    fn is_collided(&self, test_x: i32, test_y: i32) -> bool {
+        let tile_type = get_tile_type_level_coords(
+            &self.tiles,
+            self.width,
+            self.height,
+            self.wall_fg.width,
+            self.wall_fg.height,
+            test_x,
+            test_y,
+        );
+        return tile_type > 0
+    }
+
     fn draw(&self, camera_x: i32, camera_y: i32, screen: &mut Sprite) {
         // TODO(lucasw) invert this, instead of looping over every tile in the map, loop over
         // every tile in the screen and look up in map
@@ -252,7 +265,7 @@ fn main() {
 
     // TODO(lucasw) wrap in struct
     let player = png_to_sprite("data/player.png");
-    let mut player_x = 16 * level.wall_fg.width as i32;
+    let mut player_x = 68 * level.wall_fg.width as i32;
     let mut player_y: f64 = ((level.height as i32 - 16) * level.wall_fg.height as i32) as f64;
     let mut player_on_ground = false;
     let mut player_vy = 0.0;
@@ -342,28 +355,52 @@ fn main() {
                     player_vy = 0.0;
                 }
 
-                let test_x = player_x + player.width as i32 / 2;
-                let test_y = (player_y as i32) + player.height as i32;
-                let tile_type = get_tile_type_level_coords(
-                    &level.tiles,
-                    level.width,
-                    level.height,
-                    level.wall_fg.width,
-                    level.wall_fg.height,
-                    test_x,
-                    test_y,
-                );
-                if tile_type > 0 {
-                    if !player_on_ground {
-                        println!("landed");
-                        player_on_ground = true;
-                        player_vy = 0.0;
-                        let div = level.wall_fg.height as f64;
-                        player_y = (player_y / div).round() * div;
+                // see if player is on ground
+                {
+                    let test_x = player_x + player.width as i32 / 2;
+                    let test_y = (player_y as i32) + player.height as i32;
+                    let collided = level.is_collided(test_x, test_y);
+                    if collided {
+                        if !player_on_ground {
+                            println!("landed");
+                            player_on_ground = true;
+                            player_vy = 0.0;
+                            let div = level.wall_fg.height as f64;
+                            player_y = (player_y / div).round() * div;
+                        }
+                    } else if player_on_ground {
+                        println!("fell off edge");
+                        player_on_ground = false;
                     }
-                } else if player_on_ground {
-                    println!("fell off edge");
-                    player_on_ground = false;
+
+                    // debug viz xy
+                    {
+                        let test_screen_x = test_x - camera_x;
+                        let test_screen_y = test_y - camera_y;
+                        draw_pixel(&mut screen, test_screen_x, test_screen_y, 0xffee00ff);
+                    }
+                }
+
+                // see if player has hit head on tile
+                {
+                    let test_x = player_x + player.width as i32 / 2;
+                    let test_y = (player_y as i32) - 1;
+                    let collided = level.is_collided(test_x, test_y);
+                    if collided {
+                        if !player_on_ground {
+                            println!("head bumped");
+                            player_vy = 0.0;
+                            let div = level.wall_fg.height as f64;
+                            player_y = ((player_y / div).round()) * div + 1.0;
+                        }
+                    }
+
+                    // debug viz xy
+                    {
+                        let test_screen_x = test_x - camera_x;
+                        let test_screen_y = test_y - camera_y;
+                        draw_pixel(&mut screen, test_screen_x, test_screen_y, 0xffee40ff);
+                    }
                 }
 
                 draw_sprite(
@@ -372,13 +409,6 @@ fn main() {
                     player_y as i32 - camera_y,
                     &mut screen,
                 );
-
-                // debug test xy
-                {
-                    let test_screen_x = test_x - camera_x;
-                    let test_screen_y = test_y - camera_y;
-                    draw_pixel(&mut screen, test_screen_x, test_screen_y, 0xffee00ff);
-                }
             }
         }
 
