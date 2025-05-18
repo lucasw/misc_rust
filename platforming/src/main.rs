@@ -243,6 +243,7 @@ struct Player {
     on_ground: bool,
     vy: f64,
     jump_pressed_prev: bool,
+    viz_points: Vec<(i32, i32, u32)>,
 }
 
 impl Player {
@@ -255,6 +256,7 @@ impl Player {
             on_ground: false,
             vy: 0.0,
             jump_pressed_prev: false,
+            viz_points: Vec::new(),
         }
     }
 
@@ -265,6 +267,8 @@ impl Player {
         right_pressed: bool,
         jump_pressed: bool,
     ) {
+        self.viz_points.clear();
+
         if left_pressed ^ right_pressed {
             let x_step = 2;
             let mut actual_x_step;
@@ -286,8 +290,10 @@ impl Player {
                 if collided {
                     println!("left collide");
                     actual_x_step = 0;
+                    self.viz_points.push((test_x, test_y, 0x00ff0000));
                     break;
                 }
+                self.viz_points.push((test_x, test_y, 0x0011ff00));
             }
             self.x += actual_x_step;
         }
@@ -295,7 +301,7 @@ impl Player {
         // let min_x = -(self.width as i32);
         // let max_x = (screen.width + self.width) as i32;
         let min_x = 0;
-        let max_x = level.width as i32 * level.wall_fg.width as i32 - 1;
+        let max_x = (level.width as i32 - 1) * level.wall_fg.width as i32;
         if self.x > max_x {
             self.x = max_x;
         }
@@ -354,6 +360,7 @@ impl Player {
             let test_y = (self.y as i32) + self.sprite.height as i32;
             let collided = level.is_collided(test_x, test_y);
             if collided {
+                self.viz_points.push((test_x, test_y, 0x00ff3300));
                 if !self.on_ground {
                     println!("landed");
                     self.on_ground = true;
@@ -362,6 +369,7 @@ impl Player {
                     self.y = (self.y / div).round() * div;
                 }
             } else if self.on_ground {
+                self.viz_points.push((test_x, test_y, 0x0022ff33));
                 println!("fell off edge");
                 self.on_ground = false;
             }
@@ -374,14 +382,17 @@ impl Player {
             let test_x = self.x + self.sprite.width as i32 / 2;
             let test_y = (self.y as i32) - 1;
             let collided = level.is_collided(test_x, test_y);
-            if collided && !self.on_ground {
-                println!("head bumped");
-                self.vy = 0.0;
-                let div = level.wall_fg.height as f64;
-                self.y = ((self.y / div).round()) * div + 1.0;
+            if collided {
+                self.viz_points.push((test_x, test_y, 0x00ff3300));
+                if !self.on_ground {
+                    println!("head bumped");
+                    self.vy = 0.0;
+                    let div = level.wall_fg.height as f64;
+                    self.y = ((self.y / div).round()) * div + 1.0;
+                }
+            } else {
+                self.viz_points.push((test_x, test_y, 0x0022ff33));
             }
-
-            // TODO(lucasw) add test_x/y to debug viz queue
         }
     }
 
@@ -394,11 +405,11 @@ impl Player {
         );
 
         // debug viz xy
-        /* {
-            let test_screen_x = test_x - camera_x;
-            let test_screen_y = test_y - camera_y;
-            draw_pixel(&mut screen, test_screen_x, test_screen_y, 0xffee40ff);
-        } */
+        for (x, y, color) in &self.viz_points {
+            let viz_screen_x = x - camera_x;
+            let viz_screen_y = y - camera_y;
+            draw_pixel(dst_sprite, viz_screen_x, viz_screen_y, *color);
+        }
     }
 }
 
@@ -448,6 +459,9 @@ fn main() {
     while window.is_open() && !window.is_key_down(Key::Escape) {
         let t0 = std::time::Instant::now();
 
+        for elem in screen.argb.iter_mut() {
+            *elem = 0u32;
+        }
         // TODO(lucasw) have the camera lag behind the player
         let camera_x = player.x - (screen.width / 2) as i32;
         let camera_y = player.y as i32 - (screen.height / 2) as i32;
