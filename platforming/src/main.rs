@@ -1,4 +1,5 @@
 use minifb::{Key, Scale, ScaleMode, Window, WindowOptions};
+use platforming::text::Text;
 use png::{Decoder, Transformations};
 use std::fs::File;
 
@@ -288,7 +289,7 @@ impl Player {
                 let test_y = (self.y as i32) + ((i + 1) * self.sprite.height / 5) as i32 - 1;
                 let collided = level.is_collided(test_x, test_y);
                 if collided {
-                    println!("left collide");
+                    // println!("left collide");
                     actual_x_step = 0;
                     self.viz_points.push((test_x, test_y, 0x00ff0000));
                     break;
@@ -316,7 +317,7 @@ impl Player {
             println!("jump");
             // if this is too large the player can glitch through blocks, the collision response
             // just rounds to nearest block before the current collision
-            self.vy = -16.0;
+            self.vy = -9.0;
             // nudge the player off the ground so it doesn't immediately re-intersect
             self.y -= 2.0;
             self.on_ground = false;
@@ -401,14 +402,19 @@ impl Player {
             if !range.is_empty() {
                 println!("{range:?}");
             }
-            for test_y in range {
+            for (ind, test_y) in range.into_iter().enumerate() {
                 let collided = level.is_collided(test_x, test_y - 1);
-                println!("{} {}, {dy} {test_x} {test_y} {collided}", self.y, self.vy);
+                // println!("player y {}, vy {}, dy {dy} {test_x} {test_y} {collided}", self.y, self.vy);
                 if collided {
                     self.viz_points.push((test_x, test_y, 0x00ff3300));
                     if !self.on_ground {
                         println!("head bumped");
-                        self.vy = 0.0;
+                        if ind == 0 {
+                            dy = 0.5;
+                        }
+                        if self.vy < 0.0 {
+                            self.vy = 0.5;
+                        }
                         break;
                     }
                 } else {
@@ -471,6 +477,8 @@ fn main() {
     );
     // TODO(lucasw) wrap in struct
 
+    let title_text = Text::new(screen.width, screen.height, 1);
+
     let fps = 60;
     window.set_target_fps(fps);
     let update_secs = 1.0 / fps as f64;
@@ -516,6 +524,8 @@ fn main() {
         } else {
             println!("{tdiff0:?} > {update_duration:?}");
         }
+
+        title_text.draw(&mut screen.argb, (3, 3), "platform");
 
         let t1 = std::time::Instant::now();
 
