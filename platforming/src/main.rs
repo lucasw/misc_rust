@@ -1,6 +1,6 @@
 use minifb::{Key, Scale, ScaleMode, Window, WindowOptions};
 use platforming::text::Text;
-use platforming::{Level, Player, Sprite};
+use platforming::{Character, Level, Sprite};
 
 fn main() {
     let mut screen = Sprite {
@@ -29,12 +29,23 @@ fn main() {
     )
     .expect("unable to create window");
 
-    let level = Level::new();
-    let mut player = Player::new(
+    let mut level = Level::new();
+    let mut player = Character::new(
+        "data/player.png",
         68 * level.tile_width() as i32,
         (level.height as i32 - 16) * level.tile_height() as i32,
     );
-    // TODO(lucasw) wrap in struct
+
+    // TODO(lucasw) need a file to specify where enemies are
+    let mut enemies = Vec::new();
+    for x in (8..(level.width - 8)).step_by(8) {
+        let x = x as i32 * level.tile_width() as i32;
+        let mut enemy = Character::new("data/enemy.png", x, 50);
+        enemy.vx = 1;
+        enemy.vy = 8.0;
+        enemies.push(enemy);
+    }
+    println!("enemies {}", enemies.len());
 
     let title_text = Text::new(screen.width, screen.height, 1);
 
@@ -66,6 +77,15 @@ fn main() {
             let jump_pressed = window.is_key_down(Key::Up);
             player.update(&level, left_pressed, right_pressed, jump_pressed);
             player.draw(camera_x, camera_y, &mut screen);
+        }
+
+        {
+            for (ind, mut enemy) in &mut enemies.iter_mut().enumerate() {
+                let move_left = count % 20 == 0;
+                enemy.update(&level, move_left, false, false);
+                println!("{ind} enemy {} {}", enemy.x, enemy.y);
+                enemy.draw(camera_x, camera_y, &mut screen);
+            }
         }
 
         let t1 = std::time::Instant::now();

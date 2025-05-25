@@ -214,6 +214,8 @@ impl Level {
         tile_type > 0
     }
 
+    pub fn update(&mut self) {}
+
     pub fn draw(&self, camera_x: i32, camera_y: i32, screen: &mut Sprite) {
         // TODO(lucasw) invert this, instead of looping over every tile in the map, loop over
         // every tile in the screen and look up in map
@@ -249,26 +251,28 @@ impl Level {
     }
 }
 
-pub struct Player {
+pub struct Character {
     pub x: i32,
     // TODO(lucasw) making this float to be able to fall fractional pixels, but
     // it always needs to be rounded to nearest
     pub y: f64,
     sprite: Sprite,
     on_ground: bool,
-    vy: f64,
+    pub vx: i32,
+    pub vy: f64,
     jump_pressed_prev: bool,
     viz_points: Vec<(i32, i32, u32)>,
 }
 
-impl Player {
-    pub fn new(x: i32, y: i32) -> Self {
-        let sprite = png_to_sprite("data/player.png");
-        Player {
+impl Character {
+    pub fn new(png_name: &str, x: i32, y: i32) -> Self {
+        let sprite = png_to_sprite(png_name);
+        Character {
             x,
             y: y as f64,
             sprite,
             on_ground: false,
+            vx: 2,
             vy: 0.0,
             jump_pressed_prev: false,
             viz_points: Vec::new(),
@@ -285,19 +289,18 @@ impl Player {
         self.viz_points.clear();
 
         if left_pressed ^ right_pressed {
-            let x_step = 2;
             let mut actual_x_step;
             // TODO(lucasw) queue up collision points to test and zero out
             // left or right motion if any collide
             let test_x;
             if left_pressed {
-                test_x = self.x + 4 - x_step;
-                actual_x_step = -x_step;
+                test_x = self.x + 4 - self.vx;
+                actual_x_step = -self.vx;
             } else {
                 // right_pressed
                 // see if player has hit block moving to right
-                test_x = self.x + self.sprite.width as i32 - 4 + x_step;
-                actual_x_step = x_step;
+                test_x = self.x + self.sprite.width as i32 - 4 + self.vx;
+                actual_x_step = self.vx;
             }
             for i in 0..4 {
                 let test_y = (self.y as i32) + ((i + 1) * self.sprite.height / 5) as i32 - 1;
@@ -413,9 +416,9 @@ impl Player {
                     range.push(y);
                 }
             }
-            if !range.is_empty() {
-                println!("{range:?}");
-            }
+            // if !range.is_empty() {
+            //     println!("range {range:?}");
+            // }
             for (ind, test_y) in range.into_iter().enumerate() {
                 let collided = level.is_collided(test_x, test_y - 1);
                 // println!("player y {}, vy {}, dy {dy} {test_x} {test_y} {collided}", self.y, self.vy);
