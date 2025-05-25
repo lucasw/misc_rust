@@ -29,7 +29,7 @@ fn main() {
     )
     .expect("unable to create window");
 
-    let mut level = Level::new();
+    let level = Level::new();
     let mut player = Character::new(
         "data/player.png",
         68 * level.tile_width() as i32,
@@ -70,22 +70,30 @@ fn main() {
 
         level.draw(camera_x, camera_y, &mut screen);
 
-        // update player and screen position
+        let mut damage_boxes = Vec::new();
+        {
+            let no_boxes = Vec::new();
+            for (ind, enemy) in &mut enemies.iter_mut().enumerate() {
+                let move_left = count % 20 == 0;
+                enemy.update(&no_boxes, &level, move_left, false, false);
+                println!("{ind} enemy {} {}", enemy.x, enemy.y);
+                enemy.draw(camera_x, camera_y, &mut screen);
+                damage_boxes.push(enemy.get_rect());
+            }
+        }
+
         {
             let left_pressed = window.is_key_down(Key::Left);
             let right_pressed = window.is_key_down(Key::Right);
             let jump_pressed = window.is_key_down(Key::Up);
-            player.update(&level, left_pressed, right_pressed, jump_pressed);
+            player.update(
+                &damage_boxes,
+                &level,
+                left_pressed,
+                right_pressed,
+                jump_pressed,
+            );
             player.draw(camera_x, camera_y, &mut screen);
-        }
-
-        {
-            for (ind, mut enemy) in &mut enemies.iter_mut().enumerate() {
-                let move_left = count % 20 == 0;
-                enemy.update(&level, move_left, false, false);
-                println!("{ind} enemy {} {}", enemy.x, enemy.y);
-                enemy.draw(camera_x, camera_y, &mut screen);
-            }
         }
 
         let t1 = std::time::Instant::now();
@@ -104,7 +112,11 @@ fn main() {
             println!("{tdiff0:?} > {update_duration:?}");
         }
 
-        title_text.draw(&mut screen.argb, (3, 3), "platform");
+        title_text.draw(
+            &mut screen.argb,
+            (3, 3),
+            format!("hp: {}", player.hit_points).as_str(),
+        );
 
         let t1 = std::time::Instant::now();
 

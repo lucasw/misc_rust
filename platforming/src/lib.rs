@@ -252,6 +252,8 @@ impl Level {
 }
 
 pub struct Character {
+    pub hit_points: i32,
+    invincible_counter: u32,
     pub x: i32,
     // TODO(lucasw) making this float to be able to fall fractional pixels, but
     // it always needs to be rounded to nearest
@@ -268,6 +270,8 @@ impl Character {
     pub fn new(png_name: &str, x: i32, y: i32) -> Self {
         let sprite = png_to_sprite(png_name);
         Character {
+            hit_points: 16,
+            invincible_counter: 120,
             x,
             y: y as f64,
             sprite,
@@ -279,14 +283,38 @@ impl Character {
         }
     }
 
+    // (x, y), (width, height)
+    pub fn get_rect(&self) -> ((i32, i32), (i32, i32)) {
+        (
+            (self.x, self.y as i32),
+            (self.sprite.width as i32, self.sprite.height as i32),
+        )
+    }
+
+    fn jump(&mut self, vy: f64) {
+        println!("jump");
+        // if this is too large the player can glitch through blocks, the collision response
+        // just rounds to nearest block before the current collision
+        self.vy = vy;
+        // nudge the player off the ground so it doesn't immediately re-intersect
+        self.y -= 2.0;
+        self.on_ground = false;
+    }
+
     pub fn update(
         &mut self,
+        damage_rects: &Vec<((i32, i32), (i32, i32))>,
         level: &Level,
         left_pressed: bool,
         right_pressed: bool,
         jump_pressed: bool,
     ) {
         self.viz_points.clear();
+
+        let mut test_y_offsets = Vec::new();
+        for i in 0..4 {
+            test_y_offsets.push(((i + 1) * self.sprite.height / 5) as i32 - 1);
+        }
 
         if left_pressed ^ right_pressed {
             let mut actual_x_step;
@@ -302,8 +330,8 @@ impl Character {
                 test_x = self.x + self.sprite.width as i32 - 4 + self.vx;
                 actual_x_step = self.vx;
             }
-            for i in 0..4 {
-                let test_y = (self.y as i32) + ((i + 1) * self.sprite.height / 5) as i32 - 1;
+            for y_offset in &test_y_offsets {
+                let test_y = self.y as i32 + y_offset;
                 let collided = level.is_collided(test_x, test_y);
                 if collided {
                     // println!("left collide");
@@ -331,13 +359,7 @@ impl Character {
         self.jump_pressed_prev = jump_pressed;
 
         if jump_pressed_rising && self.on_ground {
-            println!("jump");
-            // if this is too large the player can glitch through blocks, the collision response
-            // just rounds to nearest block before the current collision
-            self.vy = -9.0;
-            // nudge the player off the ground so it doesn't immediately re-intersect
-            self.y -= 2.0;
-            self.on_ground = false;
+            self.jump(-9.0);
         }
         /* TODO(lucasw) crouch
            if window.is_key_down(Key::Down) {
@@ -441,15 +463,48 @@ impl Character {
             }
             self.y += dy;
         }
+
+        // damage the character if touching something damaging
+        {
+            let test_x = self.x + self.sprite.width as i32 / 2;
+            for ((x0, y0), (dwd, dht)) in damage_rects {
+                let x1 = x0 + dwd;
+                let y1 = y0 + dht;
+                for y_offset in &test_y_offsets {
+                    let test_y = self.y as i32 + y_offset;
+                    if test_x >= *x0 && test_x < x1 && test_y >= *y0 && test_y < y1 {
+                        self.damage(1);
+                        self.viz_points.push((test_x, test_y, 0x00ff4488));
+                    }
+                    // TODO(lucasw) set a bool that will draw the character differently
+                    // TODO(lucasw) move the character to the left or right depending on where
+                    // collision happens
+                }
+            }
+        }
+
+        if self.invincible_counter > 0 {
+            self.invincible_counter -= 1;
+        }
+    }
+
+    fn damage(&mut self, damage_amount: i32) {
+        if self.invincible_counter == 0 {
+            self.hit_points -= damage_amount;
+            self.jump(-4.0);
+            self.invincible_counter = 60;
+        }
     }
 
     pub fn draw(&self, camera_x: i32, camera_y: i32, dst_sprite: &mut Sprite) {
-        draw_sprite(
-            &self.sprite,
-            self.x - camera_x,
-            self.y as i32 - camera_y,
-            dst_sprite,
-        );
+        if self.invincible_counter == 0 || (self.invincible_counter / 2) % 2 == 0 {
+            draw_sprite(
+                &self.sprite,
+                self.x - camera_x,
+                self.y as i32 - camera_y,
+                dst_sprite,
+            );
+        }
 
         // debug viz xy
         for (x, y, color) in &self.viz_points {
