@@ -27,7 +27,7 @@ fn main() -> std::io::Result<()> {
     loop {
         buf[2] += 1;
         let rv = socket.send_to(&buf, &addr1);
-        println!("{rv:?}");
+        println!("sent {buf:X?}, {rv:?}");
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
 
