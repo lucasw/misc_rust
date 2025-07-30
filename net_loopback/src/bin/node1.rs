@@ -11,6 +11,7 @@ or send with the node0 binary
 
 */
 
+use postcard::from_bytes_crc32;
 use std::net::UdpSocket;
 
 fn main() -> std::io::Result<()> {
@@ -19,7 +20,9 @@ fn main() -> std::io::Result<()> {
     let socket = UdpSocket::bind(addr1)?;
     println!("{socket:?}");
 
-    let mut buf = [0; 20];
+    let crc = crc::Crc::<u32>::new(&crc::CRC_32_ISCSI);
+
+    let mut buf = [0; 32];
     loop {
         match socket.recv_from(&mut buf) {
             Ok((rx_num, src)) => {
@@ -29,7 +32,19 @@ fn main() -> std::io::Result<()> {
                         buf.len()
                     );
                 }
-                println!("{rx_num:?} bytes from {src:?}: {:X?}", &buf[..rx_num]);
+                let rx_data: net_loopback::SomeData = {
+                    match from_bytes_crc32(&buf, crc.digest()) {
+                        Ok(rx_data) => rx_data,
+                        Err(err) => {
+                            eprintln!("{err:?}");
+                            continue;
+                        }
+                    }
+                };
+                println!(
+                    "{rx_data:?} decoded from {rx_num:?} bytes from {src:?}: {:X?}",
+                    &buf[..rx_num]
+                );
             }
             Err(err) => {
                 eprintln!("{err:?}");
