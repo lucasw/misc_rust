@@ -36,8 +36,8 @@ pub enum Message {
 }
 
 impl Message {
-    const DATA: [u8; 4] = [0x5E, 0xA7, 0x00, 0x01];
-    const ARRAY: [u8; 4] = [0x5E, 0xA7, 0x00, 0x02];
+    pub const DATA: [u8; 4] = [0x5E, 0xA7, 0x00, 0x01];
+    pub const ARRAY: [u8; 4] = [0x5E, 0xA7, 0x00, 0x02];
 
     pub fn decode(msg_bytes: &[u8], crc: &crc::Crc<u32>) -> Result<Self, postcard::Error> {
         let header: [u8; 4] = msg_bytes[..4].try_into().unwrap();

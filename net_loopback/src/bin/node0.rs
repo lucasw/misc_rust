@@ -67,6 +67,24 @@ fn main() -> std::io::Result<()> {
         if array.data[6] > 2 {
             array.data[6] -= 1;
         }
+
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let garbage = [0x12, 0x34, 0x45, 0x67, 0x89];
+        let rv = socket.send_to(&garbage, addr1);
+        println!("sent garbage {garbage:X?}, rv {rv:?}");
+
+        // garbage with valid header
+        let garbage = [
+            Message::DATA[0],
+            Message::DATA[1],
+            Message::DATA[2],
+            Message::DATA[3],
+            0x89,
+        ];
+        let rv = socket.send_to(&garbage, addr1);
+        println!("sent garbage {garbage:X?} with valid header, rv {rv:?}");
+
+        // TODO(lucasw) generate garbage with valid header and valid crc32
     }
 
     // Ok(())
