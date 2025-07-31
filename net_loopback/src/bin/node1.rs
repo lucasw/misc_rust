@@ -33,7 +33,7 @@ fn main() -> std::io::Result<()> {
                     );
                 }
                 let msg: net_loopback::Message = {
-                    match Message::decode(&buf, &crc) {
+                    match Message::decode(&buf, crc.digest()) {
                         Ok(rx_data) => rx_data,
                         Err(err) => {
                             eprintln!("{err:?}");

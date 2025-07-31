@@ -40,7 +40,7 @@ fn main() -> std::io::Result<()> {
         // alternate betwee message types
         std::thread::sleep(std::time::Duration::from_secs(1));
         let msg_bytes = {
-            match Message::encode(&data, &crc) {
+            match Message::encode(&data, crc.digest()) {
                 Ok(msg_bytes) => msg_bytes,
                 Err(err) => {
                     eprintln!("{err:?}");
@@ -58,7 +58,7 @@ fn main() -> std::io::Result<()> {
 
         std::thread::sleep(std::time::Duration::from_secs(1));
         let msg_bytes = {
-            match Message::encode(&array, &crc) {
+            match Message::encode(&array, crc.digest()) {
                 Ok(msg_bytes) => msg_bytes,
                 Err(err) => {
                     eprintln!("{err:?}");

@@ -39,37 +39,37 @@ impl Message {
     pub const DATA: [u8; 4] = [0x5E, 0xA7, 0x00, 0x01];
     pub const ARRAY: [u8; 4] = [0x5E, 0xA7, 0x00, 0x02];
 
-    pub fn decode(msg_bytes: &[u8], crc: &crc::Crc<u32>) -> Result<Self, postcard::Error> {
+    pub fn decode(msg_bytes: &[u8], crc_digest: crc::Digest<'_, u32>) -> Result<Self, postcard::Error> {
         // TODO(lucasw) return an error instead of unwrap
         let header: [u8; 4] = msg_bytes[..4].try_into().unwrap();
 
         match header {
             Self::DATA => {
-                let data: SomeData = from_bytes_crc32(&msg_bytes[4..], crc.digest())?;
+                let data: SomeData = from_bytes_crc32(&msg_bytes[4..], crc_digest)?;
                 Ok(Message::Data(data))
             }
             Self::ARRAY => {
-                let array: SmallArray = from_bytes_crc32(&msg_bytes[4..], crc.digest())?;
+                let array: SmallArray = from_bytes_crc32(&msg_bytes[4..], crc_digest)?;
                 Ok(Message::Array(array))
             }
             _ => Ok(Message::Error(())),
         }
     }
 
-    pub fn encode(&self, crc: &crc::Crc<u32>) -> Result<Vec<u8>, postcard::Error> {
+    pub fn encode(&self, crc_digest: crc::Digest<'_, u32>) -> Result<Vec<u8>, postcard::Error> {
         let mut vec = Vec::new();
         match &self {
             Self::Data(data) => {
                 for byte in &Self::DATA {
                     vec.push(*byte);
                 }
-                vec.append(&mut to_stdvec_crc32(&data, crc.digest())?);
+                vec.append(&mut to_stdvec_crc32(&data, crc_digest.clone())?);
             }
             Self::Array(small_array) => {
                 for byte in &Self::ARRAY {
                     vec.push(*byte);
                 }
-                vec.append(&mut to_stdvec_crc32(&small_array, crc.digest())?);
+                vec.append(&mut to_stdvec_crc32(&small_array, crc_digest.clone())?);
             }
             Self::Error(()) => {
                 // TODO(lucasw) return an error instead of empty vec
