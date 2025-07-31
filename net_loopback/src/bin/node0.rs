@@ -15,7 +15,7 @@ netcat -ul 34201 | hexdump -C
 
 */
 
-use net_loopback::Message;
+use net_loopback::{Message, SmallArray, SomeData};
 use std::net::UdpSocket;
 
 fn main() -> std::io::Result<()> {
@@ -26,18 +26,21 @@ fn main() -> std::io::Result<()> {
 
     let crc = crc::Crc::<u32>::new(&crc::CRC_32_ISCSI);
 
-    // TODO(lucasw) construct the enum, then modify contents
-    let mut data = net_loopback::SomeData::default();
-    data.value0 += 2.52457892;
+    // It's a little bit of a pain to modify the contents of an enum, but it avoids cloning later
+    let mut data = Message::Data(SomeData {
+        value0: 2.52457892,
+        ..Default::default()
+    });
 
-    let mut array = net_loopback::SmallArray::default();
+    let mut array = SmallArray::default();
     array.data[6] = 0x23;
+    let mut array = Message::Array(array);
 
     loop {
         // alternate betwee message types
         std::thread::sleep(std::time::Duration::from_secs(1));
         let msg_bytes = {
-            match Message::encode(&Message::Data(data.clone()), &crc) {
+            match Message::encode(&data, &crc) {
                 Ok(msg_bytes) => msg_bytes,
                 Err(err) => {
                     eprintln!("{err:?}");
@@ -48,12 +51,14 @@ fn main() -> std::io::Result<()> {
         let rv = socket.send_to(&msg_bytes, addr1);
         println!("sent {data:?} encoded as {msg_bytes:X?}, rv {rv:?}");
         // msg_bytes[2] += 1;
-        data.counter += 1;
-        data.value0 += 0.1;
+        if let Message::Data(ref mut data) = data {
+            data.counter += 1;
+            data.value0 += 0.1;
+        }
 
         std::thread::sleep(std::time::Duration::from_secs(1));
         let msg_bytes = {
-            match Message::encode(&Message::Array(array.clone()), &crc) {
+            match Message::encode(&array, &crc) {
                 Ok(msg_bytes) => msg_bytes,
                 Err(err) => {
                     eprintln!("{err:?}");
@@ -63,9 +68,11 @@ fn main() -> std::io::Result<()> {
         };
         let rv = socket.send_to(&msg_bytes, addr1);
         println!("sent {array:?} encoded as {msg_bytes:X?}, rv {rv:?}");
-        array.data[6] *= 2;
-        if array.data[6] > 2 {
-            array.data[6] -= 1;
+        if let Message::Array(ref mut array) = array {
+            array.data[6] *= 2;
+            if array.data[6] > 2 {
+                array.data[6] -= 1;
+            }
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));

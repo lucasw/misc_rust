@@ -40,6 +40,7 @@ impl Message {
     pub const ARRAY: [u8; 4] = [0x5E, 0xA7, 0x00, 0x02];
 
     pub fn decode(msg_bytes: &[u8], crc: &crc::Crc<u32>) -> Result<Self, postcard::Error> {
+        // TODO(lucasw) return an error instead of unwrap
         let header: [u8; 4] = msg_bytes[..4].try_into().unwrap();
 
         match header {
@@ -70,7 +71,9 @@ impl Message {
                 }
                 vec.append(&mut to_stdvec_crc32(&small_array, crc.digest())?);
             }
-            Self::Error(()) => {}
+            Self::Error(()) => {
+                // TODO(lucasw) return an error instead of empty vec
+            }
         }
         Ok(vec)
     }
