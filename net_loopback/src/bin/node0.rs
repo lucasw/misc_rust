@@ -15,7 +15,7 @@ netcat -ul 34201 | hexdump -C
 
 */
 
-use postcard::to_stdvec_crc32;
+use net_loopback::Message;
 use std::net::UdpSocket;
 
 fn main() -> std::io::Result<()> {
@@ -25,14 +25,19 @@ fn main() -> std::io::Result<()> {
     println!("{socket:?}");
 
     let crc = crc::Crc::<u32>::new(&crc::CRC_32_ISCSI);
-    // let mut msg_bytes = [0x33, 0xBE, 0x0, 0x4, 0x6, 0x9];
+
+    // TODO(lucasw) construct the enum, then modify contents
     let mut data = net_loopback::SomeData::default();
-    data.value0 = 2.52457892;
+    data.value0 += 2.52457892;
+
+    let mut array = net_loopback::SmallArray::default();
+    array.data[6] = 0x23;
 
     loop {
+        // alternate betwee message types
         std::thread::sleep(std::time::Duration::from_secs(1));
         let msg_bytes = {
-            match to_stdvec_crc32(&data, crc.digest()) {
+            match Message::encode(&Message::Data(data.clone()), &crc) {
                 Ok(msg_bytes) => msg_bytes,
                 Err(err) => {
                     eprintln!("{err:?}");
@@ -45,6 +50,23 @@ fn main() -> std::io::Result<()> {
         // msg_bytes[2] += 1;
         data.counter += 1;
         data.value0 += 0.1;
+
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let msg_bytes = {
+            match Message::encode(&Message::Array(array.clone()), &crc) {
+                Ok(msg_bytes) => msg_bytes,
+                Err(err) => {
+                    eprintln!("{err:?}");
+                    continue;
+                }
+            }
+        };
+        let rv = socket.send_to(&msg_bytes, addr1);
+        println!("sent {array:?} encoded as {msg_bytes:X?}, rv {rv:?}");
+        array.data[6] *= 2;
+        if array.data[6] > 2 {
+            array.data[6] -= 1;
+        }
     }
 
     // Ok(())
