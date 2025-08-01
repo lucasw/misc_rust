@@ -1,6 +1,14 @@
 /*!
 Adapted from git@github.com:lucasw/nucleo-h7xx.git examples/ethernet.rs
+
+Simple ethernet example that will respond to icmp pings on
+`IP_LOCAL` and periodically send a udp packet to
+`IP_REMOTE:IP_REMOTE_PORT`
+You can start a simple listening server with netcat:
+
+nc -u -l 34254
 */
+
 #![allow(dead_code)]
 #![allow(unused_imports)]
 #![allow(unused_parens)]
@@ -33,15 +41,10 @@ use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, IpEndpoint, Ipv4Address,
 
 // use log::{debug, error, info};
 
-/// Simple ethernet example that will respond to icmp pings on
-/// `IP_LOCAL` and periodically send a udp packet to
-/// `IP_REMOTE:IP_REMOTE_PORT`
-///
-/// You can start a simple listening server with netcat:
-///
-///     nc -u -l 34254
 const MAC_LOCAL: [u8; 6] = [0x02, 0x00, 0x11, 0x22, 0x33, 0x44];
+// put this on the same ip address as your computer, make sure it isn't already in use
 const IP_LOCAL: [u8; 4] = [192, 168, 0, 123];
+// TODO(lucasw) broadcast to 255 doesn't work, so replace this with your ip address
 const IP_REMOTE: [u8; 4] = [192, 168, 0, 255];
 const IP_REMOTE_PORT: u16 = 34254;
 
@@ -125,9 +128,11 @@ fn main() -> ! {
         }
     });
 
+    let msg = "nucleo says hello!\n";
     // - main loop ------------------------------------------------------------
 
     hprintln!("Entering main loop");
+    // hprintln!(format!("{IP_REMOTE:?} {IP_REMOTE_PORT:?}"));
 
     let mut last = 0;
 
@@ -147,8 +152,8 @@ fn main() -> ! {
             ethernet_interface.now()
         });
 
-        // check if it has been 5 seconds since we last sent something
-        if (now - last) < 5000 {
+        // check if it has been 1 second since we last sent something
+        if (now - last) < 1000 {
             continue;
         } else {
             last = now;
@@ -161,8 +166,11 @@ fn main() -> ! {
                 .as_mut()
                 .unwrap()
                 .get_socket::<UdpSocket>(socket_handle);
-            match socket.send_slice("nucleo says hello!\n".as_bytes(), remote_endpoint) {
-                Ok(()) => (),
+            match socket.send_slice(msg.as_bytes(), remote_endpoint) {
+                Ok(()) => {
+                    hprintln!("sent message");
+                    // hprintln!(msg);
+                }
                 Err(smoltcp::Error::Exhausted) => (),
                 Err(e) => {
                     hprintln!("UdpSocket::send error: {:?}", e)
