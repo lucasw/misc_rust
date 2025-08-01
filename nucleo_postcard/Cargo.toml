@@ -14,6 +14,7 @@ log-itm = []
 log-rtt = []
 
 [dependencies]
+crc = "3.3.0"
 cfg-if = "1.0.0"
 cortex-m = "0.7.7"
 cortex-m-log = { version = "0.7.0", features = [ "itm", "semihosting", "log-integration" ] }
@@ -21,12 +22,12 @@ cortex-m-rt = { version = "0.7.1" }
 cortex-m-semihosting = { version = "0.5.0" }
 lazy_static = { version = "1.4.0", features = [ "spin_no_std" ] }
 log = "0.4.14"
+net_common = { path = "../net_common" }
 panic-halt = "0.2.0"
 panic-itm = { version = "0.4.2" }
 panic-rtt-target = { version = "0.1.1", features = [ "cortex-m" ] }
 panic-semihosting = { version = "0.6.0" }
 rtt-target = { version = "0.3.1", features = [ "cortex-m" ] }
-serde = { version = "1.0.219", default-features = false, features = ["derive"] }
 
 # stm32h7xx-hal = { version = "0.14.0", features = [ "stm32h753v" ] }
 nucleo-h7xx = { git = "https://github.com/lucasw/nucleo-h7xx", branch = "stm32h753", features = ["cortex-m-semihosting", "ethernet"] }

@@ -39,6 +39,8 @@ use smoltcp::storage::PacketMetadata;
 use smoltcp::time::Instant;
 use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, IpEndpoint, Ipv4Address, Ipv6Cidr};
 
+use net_common::{Message, SomeData};
+
 // use log::{debug, error, info};
 
 const MAC_LOCAL: [u8; 6] = [0x02, 0x00, 0x11, 0x22, 0x33, 0x44];
@@ -54,7 +56,8 @@ const IP_LOCAL: [u8; 4] = [192, 168, 0, 123];
 // const IP_REMOTE: [u8; 4] = [192, 168, 0, 255];
 
 const IP_REMOTE: [u8; 4] = [192, 168, 0, 100];
-const IP_REMOTE_PORT: u16 = 34254;
+// match the port in net_loopback/src/bin/node0.rs
+const IP_REMOTE_PORT: u16 = 34201;
 
 // mod utilities;
 
@@ -138,14 +141,18 @@ fn main() -> ! {
         }
     });
 
-    let msg = "nucleo says hello!\n";
-    // - main loop ------------------------------------------------------------
+    // let msg = "nucleo says hello!\n";
 
     hprintln!("Entering main loop");
     // hprintln!(format!("{IP_REMOTE:?} {IP_REMOTE_PORT:?}"));
 
     let mut last = 0;
 
+    let crc = crc::Crc::<u32>::new(&crc::CRC_32_ISCSI);
+    let mut data = Message::Data(SomeData {
+        value0: 2.52457892,
+        ..Default::default()
+    });
     loop {
         cortex_m::asm::wfi();
 
@@ -169,6 +176,21 @@ fn main() -> ! {
             last = now;
         }
 
+        if let Message::Data(ref mut data) = data {
+            data.counter += 1;
+            data.stamp_ms = now;
+            data.value0 *= 1.05;
+        }
+
+        let msg_bytes = {
+            match data.encode::<128>(crc.digest()) {
+                Ok(msg_bytes) => msg_bytes,
+                Err(err) => {
+                    hprintln!("encoding error");
+                    continue;
+                }
+            }
+        };
         // send something
         nucleo::ethernet::EthernetInterface::interrupt_free(|ethernet_interface| {
             let socket = ethernet_interface
@@ -176,7 +198,7 @@ fn main() -> ! {
                 .as_mut()
                 .unwrap()
                 .get_socket::<UdpSocket>(socket_handle);
-            match socket.send_slice(msg.as_bytes(), remote_endpoint) {
+            match socket.send_slice(&msg_bytes, remote_endpoint) {
                 Ok(()) => {
                     hprintln!("sent message");
                     // hprintln!(msg);
