@@ -3,4 +3,37 @@ name = "nucleo_postcard"
 version = "0.1.0"
 edition = "2024"
 
+# TODO(lucasw) copied these from nucleo-h7xx, maybe not needed
+[features]
+default = []
+# defmt = [ "stm32h7xx-hal/defmt" ]
+button-1-pa0 = []  # SB81=on, SB82=off
+led-1-pa5 = []     # SB65=on, SB54=off
+log-semihosting = []
+log-itm = []
+log-rtt = []
+
 [dependencies]
+cfg-if = "1.0.0"
+cortex-m = "0.7.7"
+cortex-m-log = { version = "0.7.0", features = [ "itm", "semihosting", "log-integration" ] }
+cortex-m-rt = { version = "0.7.1" }
+cortex-m-semihosting = { version = "0.5.0" }
+lazy_static = { version = "1.4.0", features = [ "spin_no_std" ] }
+log = "0.4.14"
+panic-halt = "0.2.0"
+panic-itm = { version = "0.4.2" }
+panic-rtt-target = { version = "0.1.1", features = [ "cortex-m" ] }
+panic-semihosting = { version = "0.6.0" }
+rtt-target = { version = "0.3.1", features = [ "cortex-m" ] }
+
+# stm32h7xx-hal = { version = "0.14.0", features = [ "stm32h753v" ] }
+nucleo-h7xx = { git = "https://github.com/lucasw/nucleo-h7xx", branch = "stm32h753", features = ["cortex-m-semihosting", "ethernet"] }
+
+smoltcp = { version = "0.8.1", default-features = false, features = [
+    "medium-ethernet",
+    "proto-ipv4",
+    "proto-ipv6",
+    "socket-raw",
+    "socket-udp"
+] }
