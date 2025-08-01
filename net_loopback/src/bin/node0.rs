@@ -15,7 +15,8 @@ netcat -ul 34201 | hexdump -C
 
 */
 
-use net_loopback::{Message, SmallArray, SomeData};
+use net_common::{SmallArray, SomeData};
+use net_loopback::Message;
 use std::net::UdpSocket;
 
 fn main() -> std::io::Result<()> {

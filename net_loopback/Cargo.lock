@@ -99,12 +99,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "net_common"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "net_loopback"
 version = "0.1.0"
 dependencies = [
  "crc",
+ "net_common",
  "postcard",
- "serde",
 ]
 
 [[package]]

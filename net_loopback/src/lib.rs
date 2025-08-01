@@ -1,13 +1,5 @@
+use net_common::{SmallArray, SomeData};
 use postcard::{from_bytes_crc32, to_stdvec_crc32};
-use serde::{Deserialize, Serialize};
-
-#[derive(Clone, Serialize, Deserialize, Debug, Default)]
-pub struct SomeData {
-    pub counter: u64,
-    pub value0: f64,
-    pub value1: u32,
-    pub value2: u8,
-}
 
 // need nightly only feature generic_const_exprs
 // for here W * H needs to equal SZ
@@ -23,11 +15,7 @@ pub struct Image {
 }
 */
 
-#[derive(Clone, Serialize, Deserialize, Debug, Default)]
-pub struct SmallArray {
-    pub data: [u8; 32],
-}
-
+// TODO(lucasw) probably the enum needs to move into net_common also
 #[derive(Debug)]
 pub enum Message {
     Data(SomeData),
