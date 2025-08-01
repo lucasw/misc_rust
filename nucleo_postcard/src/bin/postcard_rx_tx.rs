@@ -44,8 +44,16 @@ use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, IpEndpoint, Ipv4Address,
 const MAC_LOCAL: [u8; 6] = [0x02, 0x00, 0x11, 0x22, 0x33, 0x44];
 // put this on the same ip address as your computer, make sure it isn't already in use
 const IP_LOCAL: [u8; 4] = [192, 168, 0, 123];
-// TODO(lucasw) broadcast to 255 doesn't work, so replace this with your ip address
-const IP_REMOTE: [u8; 4] = [192, 168, 0, 255];
+// TODO(lucasw) this only works once?  Or nc only echoes it once?  I can restart nc and receive
+// it again, and I see the openocd indicating the 1Hz sends aren't failing like when 192...255 is
+// used
+// const IP_REMOTE: [u8; 4] = [255, 255, 255, 255];
+
+// these fail, only see one 'sent message' hprintln in openocd- the ethernet device is failing?
+// const IP_REMOTE: [u8; 4] = [192, 255, 255, 255];
+// const IP_REMOTE: [u8; 4] = [192, 168, 0, 255];
+
+const IP_REMOTE: [u8; 4] = [192, 168, 0, 100];
 const IP_REMOTE_PORT: u16 = 34254;
 
 // mod utilities;
@@ -55,8 +63,10 @@ fn main() -> ! {
     // - endpoints ------------------------------------------------------------
 
     let local_endpoint = IpEndpoint::new(Ipv4Address::from_bytes(&IP_LOCAL).into(), 1234);
+    // let ip_remote = IpAddress::BROADCAST;
     let remote_endpoint =
         IpEndpoint::new(Ipv4Address::from_bytes(&IP_REMOTE).into(), IP_REMOTE_PORT);
+    //  IpEndpoint::new(ip_remote, IP_REMOTE_PORT);
 
     // - board setup ----------------------------------------------------------
 
