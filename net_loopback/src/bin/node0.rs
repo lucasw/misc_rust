@@ -15,8 +15,7 @@ netcat -ul 34201 | hexdump -C
 
 */
 
-use net_common::{SmallArray, SomeData};
-use net_loopback::Message;
+use net_common::{Message, SmallArray, SomeData};
 use std::net::UdpSocket;
 
 fn main() -> std::io::Result<()> {
@@ -41,7 +40,7 @@ fn main() -> std::io::Result<()> {
         // alternate betwee message types
         std::thread::sleep(std::time::Duration::from_secs(1));
         let msg_bytes = {
-            match Message::encode(&data, crc.digest()) {
+            match net_loopback::encode(&data, crc.digest()) {
                 Ok(msg_bytes) => msg_bytes,
                 Err(err) => {
                     eprintln!("{err:?}");
@@ -59,7 +58,7 @@ fn main() -> std::io::Result<()> {
 
         std::thread::sleep(std::time::Duration::from_secs(1));
         let msg_bytes = {
-            match Message::encode(&array, crc.digest()) {
+            match net_loopback::encode(&array, crc.digest()) {
                 Ok(msg_bytes) => msg_bytes,
                 Err(err) => {
                     eprintln!("{err:?}");

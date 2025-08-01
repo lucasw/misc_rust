@@ -102,6 +102,8 @@ dependencies = [
 name = "net_common"
 version = "0.1.0"
 dependencies = [
+ "crc",
+ "postcard",
  "serde",
 ]
 

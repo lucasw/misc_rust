@@ -11,7 +11,7 @@ or send with the node0 binary
 
 */
 
-use net_loopback::Message;
+use net_common::Message;
 use std::net::UdpSocket;
 
 fn main() -> std::io::Result<()> {
@@ -32,7 +32,7 @@ fn main() -> std::io::Result<()> {
                         buf.len()
                     );
                 }
-                let msg: net_loopback::Message = {
+                let msg: Message = {
                     match Message::decode(&buf, crc.digest()) {
                         Ok(rx_data) => rx_data,
                         Err(err) => {
