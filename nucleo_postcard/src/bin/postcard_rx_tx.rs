@@ -17,7 +17,6 @@ nc -u -l 34254
 #![no_std]
 
 use cortex_m_rt::entry;
-use cortex_m_semihosting::hprintln;
 
 use nucleo::loggit;
 use nucleo_h7xx as nucleo;
@@ -60,6 +59,15 @@ const IP_REMOTE: [u8; 4] = [192, 168, 0, 100];
 const IP_REMOTE_PORT: u16 = 34201;
 
 // mod utilities;
+
+// need to disable semihosting to run outside of openocd + gdb
+// use cortex_m_semihosting::hprintln;
+// dummy hprintln
+#[macro_export]
+macro_rules! hprintln {
+    ( $( $x:expr ),* ) => {
+    }
+}
 
 #[entry]
 fn main() -> ! {
@@ -163,7 +171,7 @@ fn main() -> ! {
                 Err(smoltcp::Error::Exhausted) => (),
                 Err(smoltcp::Error::Unrecognized) => (),
                 Err(e) => {
-                    hprintln!("ethernet::EthernetInterface.poll() -> {:?}", e)
+                    hprintln!("ethernet::EthernetInterface.poll() -> {:?}", e);
                 }
             }
             ethernet_interface.now()
@@ -205,7 +213,7 @@ fn main() -> ! {
                 }
                 Err(smoltcp::Error::Exhausted) => (),
                 Err(e) => {
-                    hprintln!("UdpSocket::send error: {:?}", e)
+                    hprintln!("UdpSocket::send error: {:?}", e);
                 }
             };
         });
