@@ -32,7 +32,9 @@ use nucleo::hal;
 use hal::pac;
 use pac::interrupt;
 
-use smoltcp::iface::{Interface, InterfaceBuilder, Neighbor, NeighborCache, Route, Routes};
+use smoltcp::iface::{
+    Interface, InterfaceBuilder, Neighbor, NeighborCache, Route, Routes, SocketHandle,
+};
 use smoltcp::socket::{UdpPacketMetadata, UdpSocket, UdpSocketBuffer};
 use smoltcp::storage::PacketMetadata;
 use smoltcp::time::Instant;
@@ -54,6 +56,7 @@ const IP_LOCAL: [u8; 4] = [192, 168, 0, 123];
 // const IP_REMOTE: [u8; 4] = [192, 255, 255, 255];
 // const IP_REMOTE: [u8; 4] = [192, 168, 0, 255];
 
+// TODO(lucasw) pass this in via env!- four separate ones, and it won't be const here
 const IP_REMOTE: [u8; 4] = [192, 168, 0, 100];
 // match the port in net_loopback/src/bin/node0.rs
 const IP_REMOTE_PORT: u16 = 34201;
@@ -62,11 +65,48 @@ const IP_REMOTE_PORT: u16 = 34201;
 
 // need to disable semihosting to run outside of openocd + gdb
 // use cortex_m_semihosting::hprintln;
+// TODO(lucasw) instead of hprintln use the (usb) serial port for debug messages?
 // dummy hprintln
 #[macro_export]
 macro_rules! hprintln {
-    ( $( $x:expr ),* ) => {
-    }
+    ( $( $x:expr ),* ) => {};
+}
+
+// TODO(lucasw) return result
+fn send_message(
+    data: &Message,
+    crc: &crc::Crc<u32>,
+    socket_handle: SocketHandle,
+    remote_endpoint: IpEndpoint,
+) {
+    let msg_bytes = {
+        match data.encode::<128>(crc.digest()) {
+            Ok(msg_bytes) => msg_bytes,
+            Err(err) => {
+                hprintln!("encoding error");
+                return;
+            }
+        }
+    };
+
+    // send something
+    nucleo::ethernet::EthernetInterface::interrupt_free(|ethernet_interface| {
+        let socket = ethernet_interface
+            .interface
+            .as_mut()
+            .unwrap()
+            .get_socket::<UdpSocket>(socket_handle);
+        match socket.send_slice(&msg_bytes, remote_endpoint) {
+            Ok(()) => {
+                hprintln!("sent message");
+                // hprintln!(msg);
+            }
+            Err(smoltcp::Error::Exhausted) => (),
+            Err(e) => {
+                hprintln!("UdpSocket::send error: {:?}", e);
+            }
+        };
+    });
 }
 
 #[entry]
@@ -154,7 +194,9 @@ fn main() -> ! {
     hprintln!("Entering main loop");
     // hprintln!(format!("{IP_REMOTE:?} {IP_REMOTE_PORT:?}"));
 
-    let mut last = 0;
+    let mut rx_buffer: [u8; 128] = [0; 128];
+
+    // let mut last = 0;
 
     let crc = crc::Crc::<u32>::new(&crc::CRC_32_ISCSI);
     let mut data = Message::Data(SomeData {
@@ -177,45 +219,51 @@ fn main() -> ! {
             ethernet_interface.now()
         });
 
+        /*
         // check if it has been 1 second since we last sent something
         if (now - last) < 1000 {
             continue;
         } else {
             last = now;
         }
+        */
+
+        // receive something, and then send a response
+        let (do_send, now) =
+            nucleo::ethernet::EthernetInterface::interrupt_free(|ethernet_interface| {
+                let socket = ethernet_interface
+                    .interface
+                    .as_mut()
+                    .unwrap()
+                    .get_socket::<UdpSocket>(socket_handle);
+                let do_send = {
+                    match socket.recv_slice(&mut rx_buffer) {
+                        Ok((num_bytes, ip_endpoint)) => {
+                            // hprintln!("received message");
+                            // hprintln!(msg);
+                            true
+                        }
+                        Err(e) => {
+                            // hprintln!(": {:?}", e);
+                            false
+                        }
+                    }
+                };
+
+                (do_send, ethernet_interface.now())
+            });
+
+        if !do_send {
+            continue;
+        }
+
+        // last = now;
 
         if let Message::Data(ref mut data) = data {
             data.counter += 1;
             data.stamp_ms = now;
             data.value0 *= 1.05;
         }
-
-        let msg_bytes = {
-            match data.encode::<128>(crc.digest()) {
-                Ok(msg_bytes) => msg_bytes,
-                Err(err) => {
-                    hprintln!("encoding error");
-                    continue;
-                }
-            }
-        };
-        // send something
-        nucleo::ethernet::EthernetInterface::interrupt_free(|ethernet_interface| {
-            let socket = ethernet_interface
-                .interface
-                .as_mut()
-                .unwrap()
-                .get_socket::<UdpSocket>(socket_handle);
-            match socket.send_slice(&msg_bytes, remote_endpoint) {
-                Ok(()) => {
-                    hprintln!("sent message");
-                    // hprintln!(msg);
-                }
-                Err(smoltcp::Error::Exhausted) => (),
-                Err(e) => {
-                    hprintln!("UdpSocket::send error: {:?}", e);
-                }
-            };
-        });
+        send_message(&data, &crc, socket_handle, remote_endpoint);
     }
 }
