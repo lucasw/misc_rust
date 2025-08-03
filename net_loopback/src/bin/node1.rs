@@ -18,6 +18,7 @@ fn main() -> std::io::Result<()> {
     // let addr0 = "127.0.0.1:34200";
     // let addr1 = "127.0.0.1:34201";
     // TODO(lucasw) 127.0.0.1 doesn't work, have to use actual ip address the device is sendin to
+    // TODO(lucasw) use build.rs to set ip address from `ip a`
     let addr1 = "192.168.0.100:34201";
     let socket = UdpSocket::bind(addr1)?;
     println!("{socket:?}");

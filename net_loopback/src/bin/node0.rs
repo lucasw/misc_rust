@@ -19,10 +19,11 @@ use net_common::{Message, SmallArray, SomeData};
 use std::net::UdpSocket;
 
 fn main() -> std::io::Result<()> {
-    let addr0 = "127.0.0.1:34200";
+    let addr0 = "192.168.0.100:34200";
     let socket = UdpSocket::bind(addr0)?;
-    let addr1 = "127.0.0.1:34201";
-    println!("{socket:?}");
+    let addr1 = "192.168.0.123:34201";
+    println!("this socket is {socket:?}");
+    println!("sending to {addr1:?}");
 
     let crc = crc::Crc::<u32>::new(&crc::CRC_32_ISCSI);
 
@@ -36,9 +37,11 @@ fn main() -> std::io::Result<()> {
     array.data[6] = 0x23;
     let mut array = Message::Array(array);
 
+    let delay_secs = 3;
+
     loop {
         // alternate betwee message types
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        std::thread::sleep(std::time::Duration::from_secs(delay_secs));
         let msg_bytes = {
             match net_loopback::encode(&data, crc.digest()) {
                 Ok(msg_bytes) => msg_bytes,
@@ -56,7 +59,7 @@ fn main() -> std::io::Result<()> {
             data.value0 += 0.1;
         }
 
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        std::thread::sleep(std::time::Duration::from_secs(delay_secs));
         let msg_bytes = {
             match net_loopback::encode(&array, crc.digest()) {
                 Ok(msg_bytes) => msg_bytes,
@@ -75,7 +78,7 @@ fn main() -> std::io::Result<()> {
             }
         }
 
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        std::thread::sleep(std::time::Duration::from_secs(delay_secs));
         let garbage = [0x12, 0x34, 0x45, 0x67, 0x89];
         let rv = socket.send_to(&garbage, addr1);
         println!("sent garbage {garbage:X?}, rv {rv:?}");
