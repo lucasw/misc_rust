@@ -6,7 +6,7 @@ Simple ethernet example that will respond to icmp pings on
 `REMOTE_IP:REMOTE_PORT`
 You can start a simple listening server with netcat:
 
-nc -u -l 34254
+nc -u -l 34201
 */
 
 #![allow(dead_code)]
@@ -48,7 +48,8 @@ use net_common::{Message, SomeData};
 
 const MAC_LOCAL: [u8; 6] = [0x02, 0x00, 0x11, 0x22, 0x33, 0x44];
 // put this on the same ip address as your computer, make sure it isn't already in use
-const IP_LOCAL: [u8; 4] = [192, 168, 0, 123];
+const LOCAL_IP: [u8; 4] = [192, 168, 0, 123];
+const LOCAL_PORT: u16 = 34200;
 // TODO(lucasw) this only works once?  Or nc only echoes it once?  I can restart nc and receive
 // it again, and I see the openocd indicating the 1Hz sends aren't failing like when 192...255 is
 // used
@@ -65,13 +66,15 @@ const REMOTE_PORT: u16 = 34201;
 
 // need to disable semihosting to run outside of openocd + gdb, also remove it in the openocd.gdb
 // monitor line
-// use cortex_m_semihosting::hprintln;
+use cortex_m_semihosting::hprintln;
 // TODO(lucasw) instead of hprintln use the (usb) serial port for debug messages?
 // dummy hprintln
+/*
 #[macro_export]
 macro_rules! hprintln {
     ( $( $x:expr ),* ) => {};
 }
+*/
 
 // TODO(lucasw) return result
 fn send_message(
@@ -102,7 +105,9 @@ fn send_message(
                 hprintln!("sent message");
                 // hprintln!(msg);
             }
-            Err(smoltcp::Error::Exhausted) => (),
+            Err(smoltcp::Error::Exhausted) => {
+                hprintln!("exhausted");
+            }
             Err(e) => {
                 hprintln!("UdpSocket::send error: {:?}", e);
             }
@@ -113,7 +118,7 @@ fn send_message(
 #[entry]
 fn main() -> ! {
     // TODO(lucasw) option_env
-    let local_endpoint = IpEndpoint::new(Ipv4Address::from_bytes(&REMOTE_IP).into(), 1234);
+    let local_endpoint = IpEndpoint::new(Ipv4Address::from_bytes(&LOCAL_IP).into(), LOCAL_PORT);
     // let ip_remote = IpAddress::BROADCAST;
     let remote_endpoint = IpEndpoint::new(Ipv4Address::from_bytes(&REMOTE_IP).into(), REMOTE_PORT);
     //  IpEndpoint::new(ip_remote, REMOTE_IP_PORT);
@@ -151,7 +156,7 @@ fn main() -> ! {
     let timeout_timer = match nucleo::ethernet::EthernetInterface::start(
         pins.ethernet,
         &MAC_LOCAL,
-        &IP_LOCAL,
+        &LOCAL_IP,
         ccdr.peripheral.ETH1MAC,
         &ccdr.clocks,
         timeout_timer,
@@ -195,7 +200,7 @@ fn main() -> ! {
 
     let mut rx_buffer: [u8; 128] = [0; 128];
 
-    // let mut last = 0;
+    let mut last = 0;
 
     let crc = crc::Crc::<u32>::new(&crc::CRC_32_ISCSI);
     let mut data = Message::Data(SomeData {
@@ -218,16 +223,15 @@ fn main() -> ! {
             ethernet_interface.now()
         });
 
-        /*
         // check if it has been 1 second since we last sent something
         if (now - last) < 1000 {
             continue;
         } else {
             last = now;
         }
-        */
 
         // receive something, and then send a response
+        /*
         let (do_send, now) =
             nucleo::ethernet::EthernetInterface::interrupt_free(|ethernet_interface| {
                 let socket = ethernet_interface
@@ -238,7 +242,7 @@ fn main() -> ! {
                 let do_send = {
                     match socket.recv_slice(&mut rx_buffer) {
                         Ok((num_bytes, ip_endpoint)) => {
-                            // hprintln!("received message");
+                            hprintln!("received message");
                             // hprintln!(msg);
                             true
                         }
@@ -255,8 +259,8 @@ fn main() -> ! {
         if !do_send {
             continue;
         }
-
         // last = now;
+        */
 
         if let Message::Data(ref mut data) = data {
             data.counter += 1;

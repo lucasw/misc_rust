@@ -125,6 +125,9 @@ Error: attempted 'gdb' connection rejected
 Info : Halt timed out, wake up GDB.
 ```
 
+-> Finally got it by unplugging the ethernet port and pressing reset- the program running wasn't allowing openocd to connect, because semihosting had been disabled?
+Restore semihosting for now.
+
 ## gdb
 
 ```

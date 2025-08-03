@@ -8,4 +8,6 @@ break DefaultHandler
 break HardFault
 break rust_begin_unwind
 
-# monitor arm semihosting enable
+monitor arm semihosting enable
+
+# gdb_memory_map disable
