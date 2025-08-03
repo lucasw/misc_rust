@@ -47,6 +47,84 @@ Info : STM32H7 flash has dual banks
 Info : Bank (1) size is 1024 kb, base address is 0x08100000
 ```
 
+### openocd failures
+
+If you see this reset the device, try pull the usb cable and replug it:
+
+```
+Warn : target STM32H753ZIT6.cpu0 examination failed
+```
+
+```
+Error: [STM32H753ZIT6.cpu0] Cortex-M PARTNO 0x0 is unrecognized
+Warn : target STM32H753ZIT6.cpu0 examination failed
+Info : starting gdb server for STM32H753ZIT6.cpu0 on 3333
+Info : Listening on port 3333 for gdb connections
+Info : accepting 'gdb' connection on tcp/3333
+Error: Target not examined yet
+Error executing event gdb-attach on target STM32H753ZIT6.cpu0:
+
+Error: Target not examined yet
+Error: auto_probe failed
+Error: Connect failed. Consider setting up a gdb-attach event for the target to prepare target for GDB connect, or use 'gdb_memory_map disable'.
+Error: attempted 'gdb' connection rejected
+```
+
+### dmesg
+
+when connecting to the dev computer:
+
+```
+[19068.265085] usb 1-4: new high-speed USB device number 8 using xhci_hcd
+[19068.388696] usb 1-4: config 1 interface 2 altsetting 0 endpoint 0x84 has an invalid bInterval 255, changing to 11
+[19068.389215] usb 1-4: New USB device found, idVendor=0483, idProduct=374e, bcdDevice= 1.00
+[19068.389217] usb 1-4: New USB device strings: Mfr=1, Product=2, SerialNumber=3
+[19068.389218] usb 1-4: Product: STLINK-V3
+[19068.389219] usb 1-4: Manufacturer: STMicroelectronics
+[19068.389220] usb 1-4: SerialNumber: ...
+[19068.449080] usb-storage 1-4:1.1: USB Mass Storage device detected
+[19068.449326] scsi host8: usb-storage 1-4:1.1
+[19068.449738] cdc_acm 1-4:1.2: ttyACM0: USB ACM device
+[19069.473612] scsi 8:0:0:0: Direct-Access     MBED     microcontroller  1.0  PQ: 0 ANSI: 2
+[19069.473795] sd 8:0:0:0: Attached scsi generic sg5 type 0
+[19069.474498] sd 8:0:0:0: [sdd] 4168 512-byte logical blocks: (2.13 MB/2.04 MiB)
+[19069.474691] sd 8:0:0:0: [sdd] Write Protect is off
+[19069.474693] sd 8:0:0:0: [sdd] Mode Sense: 00 00 00 00
+[19069.474811] sd 8:0:0:0: [sdd] Asking for cache data failed
+[19069.474813] sd 8:0:0:0: [sdd] Assuming drive cache: write through
+[19069.491488] sd 8:0:0:0: [sdd] Attached SCSI removable disk
+```
+
+Try holding reset while connecting with openocd:
+
+```
+Info : Listening on port 6666 for tcl connections
+Info : Listening on port 4444 for telnet connections
+Info : clock speed 1800 kHz
+Info : STLINK V3J5M2 (API v3) VID:PID 0483:374E
+Info : Target voltage: 3.287060
+Info : [STM32H753ZIT6.cpu0] Cortex-M7 r1p1 processor detected
+Info : [STM32H753ZIT6.cpu0] target has 8 breakpoints, 4 watchpoints
+Error: read_memory: read at 0x5c001004 with width=32 and count=1 failed
+Error executing event examine-end on target STM32H753ZIT6.cpu0:
+/usr/bin/../share/openocd/scripts/target/stm32h7x.cfg:237: Error: read_memory: failed to read memory
+in procedure 'stm32h7x_dbgmcu_mmw' called at file "/usr/bin/../share/openocd/scripts/target/stm32h7x.cfg", line 170
+in procedure 'stm32h7x_mmw' called at file "/usr/bin/../share/openocd/scripts/target/stm32h7x.cfg", line 260
+in procedure 'stm32h7x_mrw' called at file "/usr/bin/../share/openocd/scripts/target/stm32h7x.cfg", line 242
+at file "/usr/bin/../share/openocd/scripts/target/stm32h7x.cfg", line 237
+Info : starting gdb server for STM32H753ZIT6.cpu0 on 3333
+Info : Listening on port 3333 for gdb connections
+Info : accepting 'gdb' connection on tcp/3333
+Error: timed out while waiting for target halted
+Error executing event gdb-attach on target STM32H753ZIT6.cpu0:
+
+Warn : Cannot identify target as a STM32H7xx family.
+Error: auto_probe failed
+Error: Connect failed. Consider setting up a gdb-attach event for the target to prepare target for GDB connect, or use 'gdb_memory_map disable'.
+Error: attempted 'gdb' connection rejected
+Info : Halt timed out, wake up GDB.
+```
+
 ## gdb
 
 ```
