@@ -4,7 +4,14 @@ Edit the remote and local ip addresses to be on the same subnet as each other an
 
 ```
 const IP_LOCAL: [u8; 4] = [192, 168, 0, 123];
-const IP_REMOTE: [u8; 4] = [192, 168, 0, 255];
+```
+
+Edit the cargo_build.sh script to look at the right interface for your ip address, or edit it to the correct ip directly instead if using `ip a`.
+
+Send a message to the board:
+
+```
+echo "test" | nc 192.168.0.123 34200
 ```
 
 build the debug binary:

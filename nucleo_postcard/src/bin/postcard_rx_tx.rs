@@ -6,7 +6,7 @@ Simple ethernet example that will respond to icmp pings on
 `REMOTE_IP:REMOTE_PORT`
 You can start a simple listening server with netcat:
 
-nc -u -l 34201
+nc -u -l 34200
 */
 
 #![allow(dead_code)]
@@ -49,7 +49,7 @@ use net_common::{Message, SomeData};
 const MAC_LOCAL: [u8; 6] = [0x02, 0x00, 0x11, 0x22, 0x33, 0x44];
 // put this on the same ip address as your computer, make sure it isn't already in use
 const LOCAL_IP: [u8; 4] = [192, 168, 0, 123];
-const LOCAL_PORT: u16 = 34200;
+const LOCAL_PORT: u16 = 34201;
 // TODO(lucasw) this only works once?  Or nc only echoes it once?  I can restart nc and receive
 // it again, and I see the openocd indicating the 1Hz sends aren't failing like when 192...255 is
 // used
@@ -60,7 +60,7 @@ const LOCAL_PORT: u16 = 34200;
 // const IP_REMOTE: [u8; 4] = [192, 168, 0, 255];
 
 // match the port in net_loopback/src/bin/node0.rs
-const REMOTE_PORT: u16 = 34201;
+const REMOTE_PORT: u16 = 34200;
 
 // mod utilities;
 
@@ -102,7 +102,7 @@ fn send_message(
             .get_socket::<UdpSocket>(socket_handle);
         match socket.send_slice(&msg_bytes, remote_endpoint) {
             Ok(()) => {
-                hprintln!("sent message");
+                hprintln!("sent message {} bytes", msg_bytes.len());
                 // hprintln!(msg);
             }
             Err(smoltcp::Error::Exhausted) => {
@@ -147,7 +147,11 @@ fn main() -> ! {
 
     // - ethernet interface ---------------------------------------------------
 
-    hprintln!("Bringing up ethernet interface");
+    hprintln!(
+        "Bringing up ethernet interface with local ip {:?} {}",
+        LOCAL_IP,
+        LOCAL_PORT
+    );
 
     let timeout_timer = dp
         .TIM17
@@ -195,11 +199,16 @@ fn main() -> ! {
 
     // let msg = "nucleo says hello!\n";
 
-    hprintln!("Entering main loop");
-    // hprintln!(format!("{REMOTE_IP:?} {REMOTE_IP_PORT:?}"));
+    // can't embed variable in string with hprintln
+    hprintln!(
+        "Entering main loop, will send messages to {:?} {}",
+        REMOTE_IP,
+        REMOTE_PORT
+    );
 
     let mut rx_buffer: [u8; 128] = [0; 128];
 
+    let mut count = 0;
     let mut last = 0;
 
     let crc = crc::Crc::<u32>::new(&crc::CRC_32_ISCSI);
@@ -225,13 +234,12 @@ fn main() -> ! {
 
         // check if it has been 1 second since we last sent something
         if (now - last) < 1000 {
-            continue;
+            // continue;
         } else {
             last = now;
         }
 
         // receive something, and then send a response
-        /*
         let (do_send, now) =
             nucleo::ethernet::EthernetInterface::interrupt_free(|ethernet_interface| {
                 let socket = ethernet_interface
@@ -242,12 +250,15 @@ fn main() -> ! {
                 let do_send = {
                     match socket.recv_slice(&mut rx_buffer) {
                         Ok((num_bytes, ip_endpoint)) => {
-                            hprintln!("received message");
-                            // hprintln!(msg);
+                            // this prints so slow
+                            // hprintln!("received message: {:?}", rx_buffer);
+                            hprintln!("received message: {} {:?}", num_bytes, ip_endpoint);
                             true
                         }
                         Err(e) => {
-                            // hprintln!(": {:?}", e);
+                            if count % 2000 == 0 {
+                                hprintln!("nothing received: {:?}", e);
+                            }
                             false
                         }
                     }
@@ -256,11 +267,12 @@ fn main() -> ! {
                 (do_send, ethernet_interface.now())
             });
 
+        count += 1;
+
         if !do_send {
             continue;
         }
-        // last = now;
-        */
+        last = now;
 
         if let Message::Data(ref mut data) = data {
             data.counter += 1;
