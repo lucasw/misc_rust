@@ -3,7 +3,7 @@ Adapted from git@github.com:lucasw/nucleo-h7xx.git examples/ethernet.rs
 
 Simple ethernet example that will respond to icmp pings on
 `IP_LOCAL` and periodically send a udp packet to
-`IP_REMOTE:IP_REMOTE_PORT`
+`REMOTE_IP:REMOTE_PORT`
 You can start a simple listening server with netcat:
 
 nc -u -l 34254
@@ -15,6 +15,8 @@ nc -u -l 34254
 #![allow(unused_variables)]
 #![no_main]
 #![no_std]
+
+include!(concat!(env!("OUT_DIR"), "/constants.rs"));
 
 use cortex_m_rt::entry;
 
@@ -56,14 +58,13 @@ const IP_LOCAL: [u8; 4] = [192, 168, 0, 123];
 // const IP_REMOTE: [u8; 4] = [192, 255, 255, 255];
 // const IP_REMOTE: [u8; 4] = [192, 168, 0, 255];
 
-// TODO(lucasw) pass this in via env!- four separate ones, and it won't be const here
-const IP_REMOTE: [u8; 4] = [192, 168, 0, 100];
 // match the port in net_loopback/src/bin/node0.rs
-const IP_REMOTE_PORT: u16 = 34201;
+const REMOTE_PORT: u16 = 34201;
 
 // mod utilities;
 
-// need to disable semihosting to run outside of openocd + gdb
+// need to disable semihosting to run outside of openocd + gdb, also remove it in the openocd.gdb
+// monitor line
 // use cortex_m_semihosting::hprintln;
 // TODO(lucasw) instead of hprintln use the (usb) serial port for debug messages?
 // dummy hprintln
@@ -111,13 +112,11 @@ fn send_message(
 
 #[entry]
 fn main() -> ! {
-    // - endpoints ------------------------------------------------------------
-
-    let local_endpoint = IpEndpoint::new(Ipv4Address::from_bytes(&IP_LOCAL).into(), 1234);
+    // TODO(lucasw) option_env
+    let local_endpoint = IpEndpoint::new(Ipv4Address::from_bytes(&REMOTE_IP).into(), 1234);
     // let ip_remote = IpAddress::BROADCAST;
-    let remote_endpoint =
-        IpEndpoint::new(Ipv4Address::from_bytes(&IP_REMOTE).into(), IP_REMOTE_PORT);
-    //  IpEndpoint::new(ip_remote, IP_REMOTE_PORT);
+    let remote_endpoint = IpEndpoint::new(Ipv4Address::from_bytes(&REMOTE_IP).into(), REMOTE_PORT);
+    //  IpEndpoint::new(ip_remote, REMOTE_IP_PORT);
 
     // - board setup ----------------------------------------------------------
 
@@ -192,7 +191,7 @@ fn main() -> ! {
     // let msg = "nucleo says hello!\n";
 
     hprintln!("Entering main loop");
-    // hprintln!(format!("{IP_REMOTE:?} {IP_REMOTE_PORT:?}"));
+    // hprintln!(format!("{REMOTE_IP:?} {REMOTE_IP_PORT:?}"));
 
     let mut rx_buffer: [u8; 128] = [0; 128];
 
