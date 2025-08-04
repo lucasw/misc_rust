@@ -42,7 +42,7 @@ use smoltcp::storage::PacketMetadata;
 use smoltcp::time::Instant;
 use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, IpEndpoint, Ipv4Address, Ipv6Cidr};
 
-use net_common::{Message, SomeData};
+use net_common::{Message, TimeStamp};
 
 // use log::{debug, error, info};
 
@@ -102,7 +102,7 @@ fn send_message(
             .get_socket::<UdpSocket>(socket_handle);
         match socket.send_slice(&msg_bytes, remote_endpoint) {
             Ok(()) => {
-                hprintln!("sent message {} bytes", msg_bytes.len());
+                // hprintln!("sent message, {} bytes", msg_bytes.len());
                 // hprintln!(msg);
             }
             Err(smoltcp::Error::Exhausted) => {
@@ -212,17 +212,16 @@ fn main() -> ! {
     let mut last = 0;
 
     let crc = crc::Crc::<u32>::new(&crc::CRC_32_ISCSI);
-    let mut data = Message::Data(SomeData {
-        value0: 2.52457892,
-        ..Default::default()
-    });
+
     loop {
         cortex_m::asm::wfi();
 
         // poll ethernet interface
         let now = nucleo::ethernet::EthernetInterface::interrupt_free(|ethernet_interface| {
             match ethernet_interface.poll() {
-                Ok(result) => {} // packets were processed or emitted
+                Ok(result) => {
+                    // hprintln!("ethernet poll result '{:?}'", result);
+                } // packets were processed or emitted
                 Err(smoltcp::Error::Exhausted) => (),
                 Err(smoltcp::Error::Unrecognized) => (),
                 Err(e) => {
@@ -232,53 +231,53 @@ fn main() -> ! {
             ethernet_interface.now()
         });
 
+        /*
         // check if it has been 1 second since we last sent something
         if (now - last) < 1000 {
             // continue;
         } else {
             last = now;
         }
+        */
 
         // receive something, and then send a response
-        let (do_send, now) =
+        let (msg, now) =
             nucleo::ethernet::EthernetInterface::interrupt_free(|ethernet_interface| {
                 let socket = ethernet_interface
                     .interface
                     .as_mut()
                     .unwrap()
                     .get_socket::<UdpSocket>(socket_handle);
-                let do_send = {
-                    match socket.recv_slice(&mut rx_buffer) {
-                        Ok((num_bytes, ip_endpoint)) => {
-                            // this prints so slow
-                            // hprintln!("received message: {:?}", rx_buffer);
-                            hprintln!("received message: {} {:?}", num_bytes, ip_endpoint);
-                            true
-                        }
-                        Err(e) => {
-                            if count % 2000 == 0 {
-                                hprintln!("nothing received: {:?}", e);
-                            }
-                            false
-                        }
+                match socket.recv_slice(&mut rx_buffer) {
+                    Ok((num_bytes, ip_endpoint)) => {
+                        // want this stamp as close to reception as possible
+                        let now = ethernet_interface.now();
+                        // this prints so slow
+                        // hprintln!("received message: {:?}", rx_buffer);
+                        // hprintln!("received message: {} {:?}", num_bytes, ip_endpoint);
+                        (Some(Message::decode(&rx_buffer, crc.digest())), now)
                     }
-                };
-
-                (do_send, ethernet_interface.now())
+                    Err(e) => {
+                        let now = ethernet_interface.now();
+                        if count % 2000 == 0 {
+                            // hprintln!("nothing received: {:?}", e);
+                        }
+                        (None, now)
+                    }
+                }
             });
 
         count += 1;
-
-        if !do_send {
-            continue;
-        }
         last = now;
 
-        if let Message::Data(ref mut data) = data {
-            data.counter += 1;
-            data.stamp_ms = now;
-            data.value0 *= 1.05;
+        if let Some(Ok(msg)) = msg {
+            if let Message::Data(mut data) = msg {
+                // send the received message back but with the local timestamp
+                data.stamp_ms = now;
+                send_message(&Message::Data(data), &crc, socket_handle, remote_endpoint);
+            } else {
+                todo!()
+            }
         }
-        send_message(&data, &crc, socket_handle, remote_endpoint);
     }
 }

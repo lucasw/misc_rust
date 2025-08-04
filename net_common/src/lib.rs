@@ -4,12 +4,11 @@ use postcard::{from_bytes_crc32, to_vec_crc32};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize, Debug, Default)]
-pub struct SomeData {
+pub struct TimeStamp {
     pub counter: u64,
+    pub seconds: u64,
+    pub nanoseconds: u32,
     pub stamp_ms: i64,
-    pub value0: f64,
-    pub value1: u32,
-    pub value2: u8,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Default)]
@@ -34,7 +33,7 @@ pub struct Image {
 // TODO(lucasw) probably the enum needs to move into net_common also
 #[derive(Debug)]
 pub enum Message {
-    Data(SomeData),
+    Data(TimeStamp),
     Array(SmallArray),
     Error(()),
 }
@@ -56,7 +55,7 @@ impl Message {
                         return Err(postcard::Error::SerializeBufferFull);
                     }
                 }
-                vec.extend(to_vec_crc32::<SomeData, SZ>(some_data, crc_digest)?);
+                vec.extend(to_vec_crc32::<TimeStamp, SZ>(some_data, crc_digest)?);
             }
             Self::Array(small_array) => {
                 for byte in &Message::ARRAY {
@@ -84,7 +83,7 @@ impl Message {
 
         match header {
             Self::DATA => {
-                let data: SomeData = from_bytes_crc32(&msg_bytes[4..], crc_digest)?;
+                let data: TimeStamp = from_bytes_crc32(&msg_bytes[4..], crc_digest)?;
                 Ok(Message::Data(data))
             }
             Self::ARRAY => {
