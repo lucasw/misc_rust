@@ -233,6 +233,8 @@ fn main() -> ! {
     let timestamp_gen = TimestampGen::default();
     let context = NtpContext::new(timestamp_gen);
 
+    // TODO(lucasw) don't do hprintln inside interrupt_free unless error
+    // (does it screw up the timer counter?
     loop {
         cortex_m::asm::wfi();
 
@@ -292,43 +294,54 @@ fn main() -> ! {
 
         // TODO(lucasw) async awaits would simplify this
         if let Some(last_tx_result) = tx_result {
-            nucleo::ethernet::EthernetInterface::interrupt_free(|ethernet_interface| {
-                let socket = ethernet_interface
-                    .interface
-                    .as_mut()
-                    .unwrap()
-                    .get_socket::<UdpSocket>(socket_handle);
+            let (now, rx_result) =
+                nucleo::ethernet::EthernetInterface::interrupt_free(|ethernet_interface| {
+                    let socket = ethernet_interface
+                        .interface
+                        .as_mut()
+                        .unwrap()
+                        .get_socket::<UdpSocket>(socket_handle);
 
-                // TODO(lucasw) I can send a message and receive it within 1 ms, but the sntp
-                // sync seems to be jittering by much more than that unless I'm interpreting it
-                // wrong.
-                // How do I apply the NtpResult to the current time?  I can compare that result
-                // with receiving a packet with a timestamp from the ntp server in the
-                // (currently commented out code) below
-                let sock_wrapper = nucleo_postcard::SmoltcpUdpSocketWrapper {
-                    socket: socket.into(),
-                };
-                let rx_result =
-                    sntp_process_response(remote_sock_addr, &sock_wrapper, context, last_tx_result);
-                match rx_result {
-                    Ok(rx_result) => {
-                        hprintln!(
-                            "sntp results tx: {:?} -> rx: {:?}",
-                            last_tx_result,
-                            rx_result
-                        );
-                        tx_result = None;
-                    }
-                    Err(sntpc::Error::Network) => {
-                        // do nothing, this is the receive timing out
-                    }
-                    Err(e) => {
-                        hprintln!("sntp response error {:?}", e);
-                        // TODO(lucasw) how to recover, just wait and try again?
-                        tx_result = None;
-                    }
+                    // TODO(lucasw) I can send a message and receive it within 1 ms, but the sntp
+                    // sync seems to be jittering by much more than that unless I'm interpreting it
+                    // wrong.
+                    // How do I apply the NtpResult to the current time?  I can compare that result
+                    // with receiving a packet with a timestamp from the ntp server in the
+                    // (currently commented out code) below
+                    let sock_wrapper = nucleo_postcard::SmoltcpUdpSocketWrapper {
+                        socket: socket.into(),
+                    };
+                    let rv = sntp_process_response(
+                        remote_sock_addr,
+                        &sock_wrapper,
+                        context,
+                        last_tx_result,
+                    );
+                    let now = ethernet_interface.now();
+                    (now, rv)
+                });
+
+            match rx_result {
+                Ok(rx_result) => {
+                    // TODO(lucasw) the hprintln may be fouling up timing
+                    // TODO(lucasw) store last rx_result and compare offsets
+                    hprintln!(
+                        "[{}] sntp offset: {:.2}s",
+                        now,
+                        // last_tx_result.originate_timestamp,
+                        rx_result.offset as f64 / 1e6
+                    );
+                    tx_result = None;
                 }
-            });
+                Err(sntpc::Error::Network) => {
+                    // do nothing, this is the receive timing out
+                }
+                Err(e) => {
+                    hprintln!("sntp response error {:?}", e);
+                    // TODO(lucasw) how to recover, just wait and try again?
+                    tx_result = None;
+                }
+            }
         }
 
         /*
@@ -354,7 +367,7 @@ fn main() -> ! {
         */
 
         // check if it has been 3 seconds since we last sent something
-        if (now - last) < 3000 {
+        if (now - last) < 5000 {
             continue;
         }
         last = now;
@@ -391,7 +404,7 @@ fn main() -> ! {
             match new_tx_result {
                 Ok(new_tx_result) => {
                     // TODO(lucasw) measure how long it took to get a response
-                    hprintln!("tx success: {:?}, now wait for response", new_tx_result);
+                    // hprintln!("[{}] tx success: {:?}, now wait for response", now, new_tx_result);
                     tx_result = Some(new_tx_result);
                 }
                 Err(e) => {
