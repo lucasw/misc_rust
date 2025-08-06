@@ -59,10 +59,12 @@ fn main() -> std::io::Result<()> {
     // let mut array = Message::Array(array);
     */
 
-    let delay_secs = 1;
+    let delay_ms = 10;
+    let accum_num = 1000 / delay_ms;
+    let mut elapsed_accum = 0.0;
 
     loop {
-        std::thread::sleep(std::time::Duration::from_secs(delay_secs));
+        std::thread::sleep(std::time::Duration::from_millis(delay_ms));
         let tx_stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("time went backwards");
@@ -97,10 +99,14 @@ fn main() -> std::io::Result<()> {
                     match Message::decode(&rx_buffer[..num_bytes], crc.digest()) {
                         Ok(Message::Data(data)) => {
                             let elapsed = (rx_stamp - tx_stamp).as_secs_f64();
-                            println!(
-                                "[{rx_stamp:?}], elapsed {:.3}ms, received data {data:?}, (sent {tx_timestamp:?})",
-                                elapsed * 1e3
-                            );
+                            elapsed_accum += elapsed;
+                            if counter % accum_num == 0 {
+                                println!(
+                                    "[{rx_stamp:?}], elapsed avg {:.2}ms, cur {:.3}ms, received data {data:?}, (sent {tx_timestamp:?})",
+                                    (elapsed_accum / accum_num as f64) * 1e3, elapsed * 1e3
+                                );
+                                elapsed_accum = 0.0;
+                            }
                         }
                         Ok(Message::Array(array)) => {
                             eprintln!("unexpected response {array:?}, tx rv was {tx_rv:?}");
