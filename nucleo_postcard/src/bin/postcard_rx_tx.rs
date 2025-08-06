@@ -42,6 +42,7 @@ use smoltcp::storage::PacketMetadata;
 use smoltcp::time::Instant;
 use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, IpEndpoint, Ipv4Address, Ipv6Cidr};
 use sntpc::NtpContext;
+use sntpc::NtpTimestampGenerator;
 use sntpc::sync::{sntp_process_response, sntp_send_request};
 
 use net_common::{Message, TimeStamp};
@@ -124,6 +125,7 @@ fn main() -> ! {
     let local_endpoint = IpEndpoint::new(Ipv4Address::from_bytes(&LOCAL_IP).into(), LOCAL_PORT);
     // let ip_remote = IpAddress::BROADCAST;
     let remote_endpoint = IpEndpoint::new(Ipv4Address::from_bytes(&REMOTE_IP).into(), REMOTE_PORT);
+    let ntp_endpoint = IpEndpoint::new(Ipv4Address::from_bytes(&REMOTE_IP).into(), 123);
     //  IpEndpoint::new(ip_remote, REMOTE_IP_PORT);
 
     // - board setup ----------------------------------------------------------
@@ -224,6 +226,7 @@ fn main() -> ! {
 
     let mut count = 0;
     let mut last = 0;
+    let mut tx_result = None;
 
     let crc = crc::Crc::<u32>::new(&crc::CRC_32_ISCSI);
 
@@ -248,53 +251,6 @@ fn main() -> ! {
             ethernet_interface.now()
         });
 
-        // check if it has been 1 second since we last sent something
-        if (now - last) < 3000 {
-            continue;
-        } else {
-            last = now;
-        }
-
-        nucleo::ethernet::EthernetInterface::interrupt_free(|ethernet_interface| {
-            let socket = ethernet_interface
-                .interface
-                .as_mut()
-                .unwrap()
-                .get_socket::<UdpSocket>(socket_handle);
-
-            let sock_wrapper = nucleo_postcard::SmoltcpUdpSocketWrapper {
-                socket: socket.into(),
-            };
-
-            // this is working
-            // { originate_timestamp: 9487534653230284800, version: 35 }
-            let tx_result = sntp_send_request(remote_sock_addr, &sock_wrapper, context);
-
-            match tx_result {
-                Ok(tx_result) => {
-                    // this is failing with Err(Network) on first try, but then later succeeds:
-                    // sntp results tx: SendRequestResult { originate_timestamp: 9487534653230284800, version: 35 } -> rx: Ok(NtpResult { seconds: 1754512190, seconds_fraction: 786663844, roundtrip: 0, offset: 1754512190183130, stratum: 3, precision: -26 })
-                    // offset is in us
-                    // TODO(lucasw) I can send a message and receive it within 1 ms, but the sntp
-                    // sync seems to be jittering by much more than that unless I'm interpreting it
-                    // wrong.
-                    // How do I apply the NtpResult to the current time?  I can compare that result
-                    // with receiving a packet with a timestamp from the ntp server in the
-                    // (currently commented out code) below
-                    let rx_result =
-                        sntp_process_response(remote_sock_addr, &sock_wrapper, context, tx_result);
-                    hprintln!("sntp results tx: {:?} -> rx: {:?}", tx_result, rx_result);
-                }
-                Err(e) => {
-                    hprintln!("send error: {:?}", e);
-                    // once_tx = true;
-                }
-            }
-        });
-
-        // just testing sntp currently
-        continue;
-
         /*
         // receive something, and then send a response
         let (msg, now) =
@@ -303,6 +259,7 @@ fn main() -> ! {
                     .interface
                     .as_mut()
                     .unwrap()
+                    .get_socket::<UdpSocket>(socket_handle);
                     .get_socket::<UdpSocket>(socket_handle);
                 match socket.recv_slice(&mut rx_buffer) {
                     Ok((num_bytes, ip_endpoint)) => {
@@ -322,10 +279,6 @@ fn main() -> ! {
                     }
                 }
             });
-
-        count += 1;
-        last = now;
-
         if let Some(Ok(msg)) = msg {
             if let Message::Data(mut data) = msg {
                 // send the received message back but with the local timestamp
@@ -336,5 +289,129 @@ fn main() -> ! {
             }
         }
         */
+
+        // TODO(lucasw) async awaits would simplify this
+        if let Some(last_tx_result) = tx_result {
+            nucleo::ethernet::EthernetInterface::interrupt_free(|ethernet_interface| {
+                let socket = ethernet_interface
+                    .interface
+                    .as_mut()
+                    .unwrap()
+                    .get_socket::<UdpSocket>(socket_handle);
+
+                // TODO(lucasw) I can send a message and receive it within 1 ms, but the sntp
+                // sync seems to be jittering by much more than that unless I'm interpreting it
+                // wrong.
+                // How do I apply the NtpResult to the current time?  I can compare that result
+                // with receiving a packet with a timestamp from the ntp server in the
+                // (currently commented out code) below
+                let sock_wrapper = nucleo_postcard::SmoltcpUdpSocketWrapper {
+                    socket: socket.into(),
+                };
+                let rx_result =
+                    sntp_process_response(remote_sock_addr, &sock_wrapper, context, last_tx_result);
+                match rx_result {
+                    Ok(rx_result) => {
+                        hprintln!(
+                            "sntp results tx: {:?} -> rx: {:?}",
+                            last_tx_result,
+                            rx_result
+                        );
+                        tx_result = None;
+                    }
+                    Err(sntpc::Error::Network) => {
+                        // do nothing, this is the receive timing out
+                    }
+                    Err(e) => {
+                        hprintln!("sntp response error {:?}", e);
+                        // TODO(lucasw) how to recover, just wait and try again?
+                        tx_result = None;
+                    }
+                }
+            });
+        }
+
+        /*
+        // do a recv on the ntp connection in order to flush any incoming messages before doing an ntp sync
+        {
+            nucleo::ethernet::EthernetInterface::interrupt_free(|ethernet_interface| {
+                let socket = ethernet_interface
+                    .interface
+                    .as_mut()
+                    .unwrap()
+                    .get_socket::<UdpSocket>(socket_handle);
+                match socket.recv_slice(&mut rx_buffer) {
+                    Ok((num_bytes, ntp_endpoint)) => {
+                        let now = ethernet_interface.now();
+                        // hprintln!("received old message?: {:?}", rx_buffer);
+                        hprintln!("received old message?  Flushing");
+                    }
+                    Err(e) => {
+                    }
+                }
+            });
+        }
+        */
+
+        // check if it has been 3 seconds since we last sent something
+        if (now - last) < 3000 {
+            continue;
+        }
+        last = now;
+
+        /*
+        if count % 5000 == 0 {
+            timestamp_gen.init();
+            hprintln!("now {}ms, timestamp gen {} seconds, {}", now, timestamp_gen.timestamp_sec(), timestamp_gen.timestamp_subsec_micros());
+        }
+        */
+
+        /*
+        timestamp_gen.init();
+        let t0 = timestamp_gen.duration_ticks;
+        */
+
+        nucleo::ethernet::EthernetInterface::interrupt_free(|ethernet_interface| {
+            let socket = ethernet_interface
+                .interface
+                .as_mut()
+                .unwrap()
+                .get_socket::<UdpSocket>(socket_handle);
+
+            let sock_wrapper = nucleo_postcard::SmoltcpUdpSocketWrapper {
+                socket: socket.into(),
+            };
+
+            // TODO(lucasw) if any unhandled ntp results are sitting in the buffer this
+            // fouls up, flush them above
+            // this is working
+            // { originate_timestamp: 9487534653230284800, version: 35 }
+            let new_tx_result = sntp_send_request(remote_sock_addr, &sock_wrapper, context);
+
+            match new_tx_result {
+                Ok(new_tx_result) => {
+                    // TODO(lucasw) measure how long it took to get a response
+                    hprintln!("tx success: {:?}, now wait for response", new_tx_result);
+                    tx_result = Some(new_tx_result);
+                }
+                Err(e) => {
+                    hprintln!("send error: {:?}", e);
+                    // once_tx = true;
+                }
+            }
+        });
+
+        /*
+        timestamp_gen.init();
+        let t1 = timestamp_gen.duration_ticks;
+        let val = {
+            ((timestamp_gen.timestamp_sec() + (u64::from(2_208_988_800u32))) << 32)
+                + u64::from(timestamp_gen.timestamp_subsec_micros()) * u64::from(u32::MAX)
+                    / u64::from(1_000_000u32)
+        };
+        hprintln!("t0 {}, t1 {}, {}", t0, t1, val);
+        */
+
+        count += 1;
     }
 }

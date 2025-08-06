@@ -72,23 +72,28 @@ static ALLOCATOR: SimpleAllocator = SimpleAllocator {
     remaining: AtomicUsize::new(ARENA_SIZE),
 };
 
-// adapted from sntpc examples simple-no-std
+// nucleo-h7xx ethernet.rs says systick timer is 1ms
+const TICKS_PER_SEC: u32 = 1_000;
+
+// adapted from sntpc examples simple-no-std + smoltcp
 #[derive(Copy, Clone, Default)]
 pub struct TimestampGen {
-    duration: u64,
+    pub duration_ticks: u32,
 }
 
 impl NtpTimestampGenerator for TimestampGen {
     fn init(&mut self) {
-        self.duration = 0u64;
+        // TODO(lucasw) does this need to be interrupt free?
+        // self.duration_ticks += 3000;
+        self.duration_ticks = nucleo_h7xx::ethernet::ATOMIC_TIME.load(Relaxed);
     }
 
     fn timestamp_sec(&self) -> u64 {
-        self.duration >> 32
+        (self.duration_ticks / TICKS_PER_SEC) as u64
     }
 
     fn timestamp_subsec_micros(&self) -> u32 {
-        (self.duration & 0xff_ff_ff_ffu64) as u32
+        (self.duration_ticks - self.timestamp_sec() as u32 * TICKS_PER_SEC) * 1_000
     }
 }
 
