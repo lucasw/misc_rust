@@ -265,6 +265,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ca88d725a0a943b096803bd34e73a4437208b6077654cc4ecb2947a5f91618d"
 
 [[package]]
+name = "miniloop"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1cb9ad8eca5baf468385765861d2670fcd7343af7dfd4bba8e8ba5ba6fca10b8"
+
+[[package]]
 name = "nb"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -325,6 +331,7 @@ dependencies = [
  "panic-semihosting",
  "rtt-target",
  "smoltcp",
+ "sntpc",
 ]
 
 [[package]]
@@ -482,6 +489,16 @@ dependencies = [
  "bitflags 1.3.2",
  "byteorder",
  "managed",
+]
+
+[[package]]
+name = "sntpc"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b32aa25e58347bda1e0bf936b6bb0e75dad35bdf4f8f89d03a4673d35bba7d3c"
+dependencies = [
+ "cfg-if",
+ "miniloop",
 ]
 
 [[package]]
