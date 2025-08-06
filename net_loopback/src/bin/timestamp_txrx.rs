@@ -16,28 +16,43 @@ netcat -ul 34201 | hexdump -C
 
 */
 
-use net_common::{Message, SmallArray, TimeStamp};
+use clap::{Command, arg};
+use net_common::{Message, TimeStamp};
 use std::net::UdpSocket;
 use std::time::Duration;
 
 fn main() -> std::io::Result<()> {
-    // TODO(lucasw) get this ip address from command line argument
-    let addr0 = "192.168.0.100:34200";
-    let socket = UdpSocket::bind(addr0)?;
-    // 1 second timeout
+    let matches = Command::new("timestamp_txrx")
+        .args(&[
+            arg!(
+                -l --local_ip <LOCAL_IP> "ip of local computer running this program"
+            )
+            .default_value("127.0.0.1"),
+            arg!(
+                -r --remote_ip <REMOTE_IP> "ip of remote device"
+            )
+            .default_value("192.168.0.123"),
+        ])
+        .get_matches();
+    let local_ip = matches.get_one::<String>("local_ip").unwrap();
+    let local_ip_port = format!("{local_ip}:34200");
+    println!(
+        "ip and port of this device {local_ip_port:?} (note 127.0.0.1 may not work with remote device)"
+    );
+    let socket = UdpSocket::bind(local_ip_port)?;
+    // 1 second timeout on receiving
     let recv_timeout = Duration::new(1, 0);
     let result = socket.set_read_timeout(Some(recv_timeout));
-    println!("set socket recv timeout to {recv_timeout:?}, {result:?}");
+    println!("set socket {socket:?} recv timeout to {recv_timeout:?}, {result:?}");
 
-    let addr1 = "192.168.0.123:34201";
+    let remote_ip = matches.get_one::<String>("remote_ip").unwrap();
+    let remote_ip_port = format!("{remote_ip}:34201");
     println!("this socket is {socket:?}");
-    println!("sending to {addr1:?}");
+    println!("sending to {remote_ip_port:?}");
 
     let crc = crc::Crc::<u32>::new(&crc::CRC_32_ISCSI);
 
-    // It's a little bit of a pain to modify the contents of an enum, but it avoids cloning later
-    let mut tx_timestamp = Message::Data(TimeStamp::default());
-
+    let mut counter = 0;
     /*
     let mut array = SmallArray::default();
     array.data[6] = 0x23;
@@ -51,11 +66,14 @@ fn main() -> std::io::Result<()> {
         let tx_stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("time went backwards");
-        if let Message::Data(ref mut data) = tx_timestamp {
-            data.counter += 1;
-            data.seconds = tx_stamp.as_secs();
-            data.nanoseconds = tx_stamp.subsec_nanos();
-        }
+        // if let Message::Data(ref mut data) = tx_timestamp
+        let tx_timestamp = Message::Data(TimeStamp {
+            counter,
+            seconds: tx_stamp.as_secs(),
+            nanoseconds: tx_stamp.subsec_nanos(),
+            stamp_ms: 0,
+        });
+        counter += 1;
 
         let msg_bytes = {
             match net_loopback::encode(&tx_timestamp, crc.digest()) {
@@ -66,7 +84,7 @@ fn main() -> std::io::Result<()> {
                 }
             }
         };
-        let tx_rv = socket.send_to(&msg_bytes, addr1);
+        let tx_rv = socket.send_to(&msg_bytes, &remote_ip_port);
         // println!("sent {data:?} encoded as {msg_bytes:X?}, rv {rv:?}");
 
         let mut rx_buffer = [0; 256];
