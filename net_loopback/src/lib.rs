@@ -9,7 +9,7 @@ pub fn encode(
 ) -> Result<Vec<u8>, postcard::Error> {
     let mut vec = Vec::new();
     match &message {
-        Message::Data(data) => {
+        Message::TimeStamp(data) => {
             for byte in &Message::DATA {
                 vec.push(*byte);
             }

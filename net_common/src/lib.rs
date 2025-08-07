@@ -9,6 +9,10 @@ pub struct TimeStamp {
     pub seconds: u64,
     pub nanoseconds: u32,
     pub stamp_ms: i64,
+    pub ntp_offset: i64,
+    pub ntp_seconds: u32,
+    pub ntp_seconds_fraction: u32,
+    pub ntp_roundtrip: u64,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Default)]
@@ -33,7 +37,7 @@ pub struct Image {
 // TODO(lucasw) probably the enum needs to move into net_common also
 #[derive(Debug)]
 pub enum Message {
-    Data(TimeStamp),
+    TimeStamp(TimeStamp),
     Array(SmallArray),
     Error(()),
 }
@@ -49,7 +53,7 @@ impl Message {
     ) -> Result<heapless::Vec<u8, SZ>, postcard::Error> {
         let mut vec = heapless::Vec::<u8, SZ>::new();
         match self {
-            Self::Data(some_data) => {
+            Self::TimeStamp(some_data) => {
                 for byte in &Message::DATA {
                     if vec.push(*byte).is_err() {
                         return Err(postcard::Error::SerializeBufferFull);
@@ -84,7 +88,7 @@ impl Message {
         match header {
             Self::DATA => {
                 let data: TimeStamp = from_bytes_crc32(&msg_bytes[4..], crc_digest)?;
-                Ok(Message::Data(data))
+                Ok(Message::TimeStamp(data))
             }
             Self::ARRAY => {
                 let array: SmallArray = from_bytes_crc32(&msg_bytes[4..], crc_digest)?;

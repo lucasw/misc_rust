@@ -34,6 +34,7 @@ use nucleo::hal;
 use hal::pac;
 use pac::interrupt;
 
+use smoltcp;
 use smoltcp::iface::{
     Interface, InterfaceBuilder, Neighbor, NeighborCache, Route, Routes, SocketHandle,
 };
@@ -80,43 +81,51 @@ macro_rules! hprintln {
 }
 */
 
+#[derive(Debug)]
+pub enum Error {
+    Postcard(postcard::Error),
+    Smoltcp(smoltcp::Error),
+}
+pub type Result<T> = core::result::Result<T, Error>;
+
 // TODO(lucasw) return result
 fn send_message(
     data: &Message,
     crc: &crc::Crc<u32>,
     socket_handle: SocketHandle,
     remote_endpoint: IpEndpoint,
-) {
+) -> Result<usize> {
     let msg_bytes = {
         match data.encode::<128>(crc.digest()) {
             Ok(msg_bytes) => msg_bytes,
+            // Err(postcard::Error(err)) => {
             Err(err) => {
-                hprintln!("encoding error");
-                return;
+                return Err(Error::Postcard(err));
             }
         }
     };
 
     // send something
-    nucleo::ethernet::EthernetInterface::interrupt_free(|ethernet_interface| {
+    let rv = nucleo::ethernet::EthernetInterface::interrupt_free(|ethernet_interface| {
         let socket = ethernet_interface
             .interface
             .as_mut()
             .unwrap()
             .get_socket::<UdpSocket>(socket_handle);
-        match socket.send_slice(&msg_bytes, remote_endpoint) {
-            Ok(()) => {
-                // hprintln!("sent message, {} bytes", msg_bytes.len());
-                // hprintln!(msg);
-            }
-            Err(smoltcp::Error::Exhausted) => {
-                hprintln!("exhausted");
-            }
-            Err(e) => {
-                hprintln!("UdpSocket::send error: {:?}", e);
-            }
-        };
+        socket.send_slice(&msg_bytes, remote_endpoint)
     });
+    match rv {
+        Ok(()) => {
+            return Ok((msg_bytes.len()));
+            // hprintln!("sent message, {} bytes", msg_bytes.len());
+            // hprintln!(msg);
+        }
+        // Err(smoltcp::Error(err)) => {
+        Err(err) => {
+            // Err(Error::Smoltcp(err)) => {
+            return Err(Error::Smoltcp(err));
+        }
+    };
 }
 
 #[entry]
@@ -224,9 +233,10 @@ fn main() -> ! {
 
     // let mut rx_buffer: [u8; 128] = [0; 128];
 
-    let mut count = 0;
+    let mut counter = 0;
     let mut last = 0;
-    let mut tx_result = None;
+    let mut ntp_tx_result = None;
+    let mut ntp_rx_result = None;
 
     let crc = crc::Crc::<u32>::new(&crc::CRC_32_ISCSI);
 
@@ -274,7 +284,7 @@ fn main() -> ! {
                     }
                     Err(e) => {
                         let now = ethernet_interface.now();
-                        if count % 2000 == 0 {
+                        if counter % 2000 == 0 {
                             // hprintln!("nothing received: {:?}", e);
                         }
                         (None, now)
@@ -293,8 +303,8 @@ fn main() -> ! {
         */
 
         // TODO(lucasw) async awaits would simplify this
-        if let Some(last_tx_result) = tx_result {
-            let (now, rx_result) =
+        if let Some(last_tx_result) = ntp_tx_result {
+            let (now, new_rx_result) =
                 nucleo::ethernet::EthernetInterface::interrupt_free(|ethernet_interface| {
                     let socket = ethernet_interface
                         .interface
@@ -321,25 +331,57 @@ fn main() -> ! {
                     (now, rv)
                 });
 
-            match rx_result {
-                Ok(rx_result) => {
+            match new_rx_result {
+                Ok(new_rx_result) => {
                     // TODO(lucasw) the hprintln may be fouling up timing
                     // TODO(lucasw) store last rx_result and compare offsets
+                    /*
                     hprintln!(
                         "[{}] sntp offset: {:.2}s",
                         now,
                         // last_tx_result.originate_timestamp,
                         rx_result.offset as f64 / 1e6
                     );
-                    tx_result = None;
+                    */
+
+                    let timestamp_msg = TimeStamp {
+                        counter,
+                        // TODO(lucasw) these are for the timestamp received from the other
+                        // computer via a TimeStamp message, maybe get rid of them?
+                        seconds: 0,
+                        nanoseconds: 0,
+                        stamp_ms: now,
+                        ntp_offset: new_rx_result.offset,
+                        ntp_seconds: new_rx_result.seconds,
+                        ntp_seconds_fraction: new_rx_result.seconds_fraction,
+                        ntp_roundtrip: new_rx_result.roundtrip,
+                    };
+                    let tx_rv = send_message(
+                        &Message::TimeStamp(timestamp_msg),
+                        &crc,
+                        socket_handle,
+                        remote_endpoint,
+                    );
+                    match tx_rv {
+                        Ok(num_bytes) => {}
+                        Err(Error::Smoltcp(smoltcp::Error::Exhausted)) => {
+                            hprintln!("exhausted");
+                        }
+                        Err(e) => {
+                            hprintln!("UdpSocket::send error: {:?}", e);
+                        }
+                    }
+
+                    ntp_rx_result = Some(new_rx_result);
+                    ntp_tx_result = None;
                 }
                 Err(sntpc::Error::Network) => {
-                    // do nothing, this is the receive timing out
+                    // do nothing, this is the receive timing out, get the response in a later loop
                 }
                 Err(e) => {
                     hprintln!("sntp response error {:?}", e);
                     // TODO(lucasw) how to recover, just wait and try again?
-                    tx_result = None;
+                    ntp_tx_result = None;
                 }
             }
         }
@@ -366,8 +408,8 @@ fn main() -> ! {
         }
         */
 
-        // check if it has been 3 seconds since we last sent something
-        if (now - last) < 5000 {
+        // check if it has been 1 second since we last sent something
+        if (now - last) < 1000 {
             continue;
         }
         last = now;
@@ -405,11 +447,10 @@ fn main() -> ! {
                 Ok(new_tx_result) => {
                     // TODO(lucasw) measure how long it took to get a response
                     // hprintln!("[{}] tx success: {:?}, now wait for response", now, new_tx_result);
-                    tx_result = Some(new_tx_result);
+                    ntp_tx_result = Some(new_tx_result);
                 }
                 Err(e) => {
                     hprintln!("send error: {:?}", e);
-                    // once_tx = true;
                 }
             }
         });
@@ -425,6 +466,6 @@ fn main() -> ! {
         hprintln!("t0 {}, t1 {}, {}", t0, t1, val);
         */
 
-        count += 1;
+        counter += 1;
     }
 }

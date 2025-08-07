@@ -68,12 +68,13 @@ fn main() -> std::io::Result<()> {
         let tx_stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("time went backwards");
-        // if let Message::Data(ref mut data) = tx_timestamp
-        let tx_timestamp = Message::Data(TimeStamp {
+        // if let Message::TimeStamp(ref mut data) = tx_timestamp
+        let tx_timestamp = Message::TimeStamp(TimeStamp {
             counter,
             seconds: tx_stamp.as_secs(),
             nanoseconds: tx_stamp.subsec_nanos(),
             stamp_ms: 0,
+            ..Default::default()
         });
         counter += 1;
 
@@ -97,13 +98,14 @@ fn main() -> std::io::Result<()> {
                         .duration_since(std::time::UNIX_EPOCH)
                         .expect("time went backwards");
                     match Message::decode(&rx_buffer[..num_bytes], crc.digest()) {
-                        Ok(Message::Data(data)) => {
+                        Ok(Message::TimeStamp(data)) => {
                             let elapsed = (rx_stamp - tx_stamp).as_secs_f64();
                             elapsed_accum += elapsed;
                             if counter % accum_num == 0 {
                                 println!(
                                     "[{rx_stamp:?}], elapsed avg {:.2}ms, cur {:.3}ms, received data {data:?}, (sent {tx_timestamp:?})",
-                                    (elapsed_accum / accum_num as f64) * 1e3, elapsed * 1e3
+                                    (elapsed_accum / accum_num as f64) * 1e3,
+                                    elapsed * 1e3
                                 );
                                 elapsed_accum = 0.0;
                             }
@@ -129,7 +131,7 @@ fn main() -> std::io::Result<()> {
 
         /*
         // msg_bytes[2] += 1;
-        if let Message::Data(ref mut data) = data {
+        if let Message::TimeStamp(ref mut data) = data {
             data.counter += 1;
             data.value0 += 0.1;
         }

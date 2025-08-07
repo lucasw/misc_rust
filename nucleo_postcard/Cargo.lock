@@ -329,6 +329,7 @@ dependencies = [
  "panic-itm",
  "panic-rtt-target",
  "panic-semihosting",
+ "postcard",
  "rtt-target",
  "smoltcp",
  "sntpc",

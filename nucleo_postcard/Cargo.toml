@@ -40,4 +40,5 @@ smoltcp = { version = "0.8.1", default-features = false, features = [
     "socket-udp"
 ] }
 sntpc = { version = "0.6.0", default-features = false, features = [ "sync" ] }
+postcard = "1.1.3"
 # sntpc = { path = "../../../embedded/sntpc/sntpc", default-features = false, features = [ "sync" ] }
