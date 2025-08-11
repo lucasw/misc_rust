@@ -11,7 +11,7 @@ Edit the cargo_build.sh script to look at the right interface for your ip addres
 Send a message to the board:
 
 ```
-echo "test" | nc 192.168.0.123 34200
+echo "test" | nc -u 192.168.0.123 34201
 ```
 
 build the debug binary:

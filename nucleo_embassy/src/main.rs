@@ -9,7 +9,7 @@ use embassy_executor::{Spawner, main, task};
 use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_time::Timer;
 
-use embassy_net::udp::{PacketMetadata, UdpMetadata, UdpSocket};
+use embassy_net::udp::{PacketMetadata, RecvError, UdpMetadata, UdpSocket};
 use embassy_net::{Ipv4Address, Ipv4Cidr, StackResources};
 use embassy_stm32::eth::{Ethernet, GenericPhy, PacketQueue};
 use embassy_stm32::peripherals::ETH;
@@ -39,7 +39,7 @@ bind_interrupts!(struct Irqs {
 
 #[main]
 async fn main(spawner: Spawner) {
-    hprintln!("embassy led flashing start");
+    hprintln!("embassy udp + led flashing start");
 
     let p = embassy_stm32::init(Default::default());
     /*
@@ -99,7 +99,6 @@ async fn main(spawner: Spawner) {
     let mut rx_buffer = [0; 4096];
     let mut tx_meta = [PacketMetadata::EMPTY; 16];
     let mut tx_buffer = [0; 4096];
-    let mut buf = [0; 4096];
 
     let mut socket = UdpSocket::new(
         stack,
@@ -108,7 +107,8 @@ async fn main(spawner: Spawner) {
         &mut tx_meta,
         &mut tx_buffer,
     );
-    socket.bind(34201).unwrap();
+    let local_port = 34201;
+    socket.bind(local_port).unwrap();
 
     let endpoint = UdpMetadata {
         // TODO(lucasw) use build.rs to set target ip address, also experiment with broadcast
@@ -122,13 +122,32 @@ async fn main(spawner: Spawner) {
     spawner.must_spawn(flash_led(led_orange, 1100));
     spawner.must_spawn(flash_led(led_red, 2250));
 
+    let mut rx_buf = [0; 4096];
+    let mut tx_buf = [0; 4096];
+
     let mut count = 0;
     loop {
-        buf[0] = 0xff;
-        buf[1] = count as u8;
-        buf[2] = (count / 256) as u8;
-        socket.send_to(&buf[0..16], endpoint).await.unwrap();
-        Timer::after_millis(200).await;
+        let num = {
+            hprintln!("wait for message on {:?} {}", local_ip_addr, local_port);
+            match socket.recv_from(&mut rx_buf).await {
+                Ok((num, _meta)) => {
+                    // hprintln!("rx {}", num);
+                    num
+                }
+                Err(RecvError::Truncated) => {
+                    hprintln!("receive error truncated");
+                    // continue;
+                    rx_buf.len()
+                }
+            }
+        };
+        tx_buf[0] = 0xff;
+        tx_buf[3] = (count / 256) as u8;
+        tx_buf[2] = count as u8;
+        tx_buf[6] = (num / 256) as u8;
+        tx_buf[5] = num as u8;
+        socket.send_to(&tx_buf[0..16], endpoint).await.unwrap();
+        // Timer::after_millis(200).await;
         count += 1;
     }
 }
