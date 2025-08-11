@@ -19,6 +19,9 @@ use embassy_stm32::{bind_interrupts, eth, peripherals, rng};
 use smoltcp::wire::{IpAddress, IpEndpoint};
 use static_cell::StaticCell;
 
+// build.rs output
+include!(concat!(env!("OUT_DIR"), "/constants.rs"));
+
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
     hprintln!("{}", info);
@@ -113,7 +116,7 @@ async fn main(spawner: Spawner) {
     let endpoint = UdpMetadata {
         // TODO(lucasw) use build.rs to set target ip address, also experiment with broadcast
         // 255 has the same behavior as with nucleo-h7xx- one packet is received then no more
-        endpoint: IpEndpoint::new(Ipv4Address::new(192, 168, 0, 100).into(), 34200),
+        endpoint: IpEndpoint::new(Ipv4Address::new(REMOTE_IP[0], REMOTE_IP[1], REMOTE_IP[2], REMOTE_IP[3]).into(), 34200),
         local_address: Some(IpAddress::Ipv4(local_ip_addr)),
         meta: smoltcp::phy::PacketMeta::default(),
     };
