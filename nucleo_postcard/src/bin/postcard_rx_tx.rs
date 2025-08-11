@@ -220,7 +220,7 @@ fn main() -> ! {
         REMOTE_PORT
     );
 
-    let udp_port = 123;
+    let ntp_port = 123;
     let remote_sock_addr = sntpc::net::SocketAddr::new(
         core::net::IpAddr::V4(core::net::Ipv4Addr::new(
             REMOTE_IP[0],
@@ -228,7 +228,7 @@ fn main() -> ! {
             REMOTE_IP[2],
             REMOTE_IP[3],
         )),
-        123,
+        ntp_port,
     );
 
     // let mut rx_buffer: [u8; 128] = [0; 128];

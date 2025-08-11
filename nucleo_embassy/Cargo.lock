@@ -817,8 +817,7 @@ dependencies = [
 [[package]]
 name = "sntpc"
 version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b32aa25e58347bda1e0bf936b6bb0e75dad35bdf4f8f89d03a4673d35bba7d3c"
+source = "git+https://github.com/lucasw/sntpc?branch=embassy_process_response#84685704d888ae17ee9553a226f2b22fc9b6c19d"
 dependencies = [
  "cfg-if",
  "miniloop",

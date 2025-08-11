@@ -26,6 +26,7 @@ smoltcp = { version = "0.12.0", default-features = false, features = [
   # "async",
 ] }
 sntpc = { version = "0.6.0", default-features = false, features = [ "sync" ] }
+# sntpc = { path = "../../../embedded/sntpc/sntpc", default-features = false, features = [ "sync" ] }
 postcard = "1.1.3"
 embassy-net = { version = "0.7.0", features = [ "medium-ethernet", "proto-ipv4", "udp" ] }
 static_cell = "2.1.1"
@@ -37,3 +38,4 @@ embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "f2be6
 embassy-net = { git = "https://github.com/embassy-rs/embassy", rev = "f2be66a5f94a655696407e2e7bc81c322aab3ea1" }
 embassy-stm32 = { git = "https://github.com/embassy-rs/embassy", rev = "f2be66a5f94a655696407e2e7bc81c322aab3ea1" }
 embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "f2be66a5f94a655696407e2e7bc81c322aab3ea1" }
+sntpc = { git = "https://github.com/lucasw/sntpc", branch = "embassy_process_response" }
