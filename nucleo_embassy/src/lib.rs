@@ -15,7 +15,12 @@ use embassy_net::udp::{UdpMetadata, UdpSocket};
 use embassy_net::{IpAddress, IpEndpoint, Ipv4Address};
 
 use sntpc::net::SocketAddr;
-use sntpc::{NtpTimestampGenerator, NtpUdpSocket, Result};
+use sntpc::sync::sntp_send_request;
+use sntpc::{
+    Error, NtpContext, NtpPacket, NtpResult, NtpTimestampGenerator, NtpUdpSocket, RawNtpPacket,
+    Result,
+};
+use sntpc::{get_ntp_timestamp, process_response};
 
 include!(concat!(env!("OUT_DIR"), "/constants.rs"));
 
@@ -161,4 +166,62 @@ impl NtpUdpSocket for EmbassyUdpSocketWrapper<'_, '_> {
 
         Err(sntpc::Error::Network)
     }
+}
+
+// TODO(lucasw) move to sntpc fork
+pub async fn get_sntpc_corrections(
+    remote_sock_addr: &sntpc::net::SocketAddr,
+    sock_wrapper: &EmbassyUdpSocketWrapper<'_, '_>,
+    mut context: NtpContext<TimestampGen>,
+) -> Result<NtpResult> {
+    // TODO(lucasw) if any unhandled ntp results are sitting in the buffer this
+    // fouls up, flush them above
+    // this is working
+    // { originate_timestamp: 9487534653230284800, version: 35 }
+    let send_req_result = sntp_send_request(*remote_sock_addr, sock_wrapper, context)?;
+
+    // let now = Instant::now().as_millis() as f64 / 1e3;
+    // hprintln!("[{:.3}] {:?}", now, send_req_result);
+
+    // TODO(lucasw) this is a local version of sntp_process_response(), it appears to be working
+    // where-as the sntpc version is locking up because it isn't meant to be used in the
+    // embassy task environment?
+    // I next need to clean up the hprintlns and report out the offset and see that it is stable,
+    // then could make a fork of sntpc that provides this version of the function, but for
+    // now it will exist here and be paired with a fork of sntpc that makes the needed structs
+    // and functions public.
+    // TODO(lucasw) lots of cargo clippy warnings to clean up
+    let mut response_buf = RawNtpPacket::default();
+    let (response, _udp_src) = sock_wrapper.recv_from(response_buf.0.as_mut()).await?;
+
+    // TODO(lucasw) need to compare IpAddr to IpAddress
+    /*
+    if remote_sock_addr.ip() != udp_src.endpoint.addr {
+       return Err(Error::ResponseAddressMismatch);
+    }
+    */
+
+    if response != size_of::<NtpPacket>() {
+        // hprintln!("bad ntp rx size {} != {}", response, size_of::<NtpPacket>());
+        return Err(Error::IncorrectPayload);
+    }
+
+    context.timestamp_gen.init();
+    let recv_timestamp = get_ntp_timestamp(&context.timestamp_gen);
+
+    // hprintln!("{:?}", recv_timestamp);
+    // let (response, src) i
+
+    process_response(send_req_result, response_buf, recv_timestamp)
+    // hprintln!("ntp process result: {:?}", result);
+
+    /*
+    // TODO(lucasw) this is locking up, maybe the socket recv_from within it is never returning
+    let rv = sntp_process_response(
+    remote_sock_addr,
+    &sock_wrapper,
+    context,
+    ntp_tx_result,
+    );
+    */
 }

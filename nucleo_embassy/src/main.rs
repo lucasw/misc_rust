@@ -19,9 +19,7 @@ use embassy_time::{Instant, Timer};
 use smoltcp::wire::{IpAddress, IpEndpoint};
 
 use nucleo_embassy::{LOCAL_IP, REMOTE_IP, TimestampGen};
-use sntpc::sync::{sntp_process_response, sntp_send_request};
-use sntpc::{NtpContext, NtpPacket, RawNtpPacket, get_ntp_timestamp};
-use sntpc::{NtpTimestampGenerator, process_response};
+use sntpc::NtpContext;
 
 use static_cell::StaticCell;
 
@@ -199,7 +197,7 @@ async fn time_sync(stack: Stack<'static>, ntp_server_ip: [u8; 4]) -> ! {
     );
 
     let timestamp_gen = TimestampGen::default();
-    let mut context = NtpContext::new(timestamp_gen);
+    let context = NtpContext::new(timestamp_gen);
 
     // TODO(lucasw) do this before calling time sync, pass in the wrapper?
     let sock_wrapper = nucleo_embassy::EmbassyUdpSocketWrapper {
@@ -210,92 +208,15 @@ async fn time_sync(stack: Stack<'static>, ntp_server_ip: [u8; 4]) -> ! {
     loop {
         Timer::after_millis(1000).await;
 
-        // TODO(lucasw) if any unhandled ntp results are sitting in the buffer this
-        // fouls up, flush them above
-        // this is working
-        // { originate_timestamp: 9487534653230284800, version: 35 }
-        let send_req_result = sntp_send_request(remote_sock_addr, &sock_wrapper, context);
-
+        let rv =
+            nucleo_embassy::get_sntpc_corrections(&remote_sock_addr, &sock_wrapper, context).await;
         let now = Instant::now().as_millis() as f64 / 1e3;
-        hprintln!("[{:.3}] {:?}", now, send_req_result);
-
-        let send_req_result = {
-            match send_req_result {
-                Ok(send_req_result) => {
-                    // TODO(lucasw) measure how long it took to get a response
-                    // hprintln!("[{}] tx success: {:?}, now wait for response", now, send_req_result);
-                    send_req_result
-                }
-                Err(e) => {
-                    hprintln!("[{:.3}] sntp send error: {:?}", now, e);
-                    continue;
-                }
-            }
-        };
-
-        // TODO(lucasw) this is a local version of sntp_process_response(), it appears to be working
-        // where-as the sntpc version is locking up because it isn't meant to be used in the
-        // embassy task environment?
-        // I next need to clean up the hprintlns and report out the offset and see that it is stable,
-        // then could make a fork of sntpc that provides this version of the function, but for
-        // now it will exist here and be paired with a fork of sntpc that makes the needed structs
-        // and functions public.
-        // TODO(lucasw) lots of cargo clippy warnings to clean up
-        let mut response_buf = RawNtpPacket::default();
-        let rv = sock_wrapper
-            .socket
-            .borrow()
-            .recv_from(response_buf.0.as_mut())
-            .await;
-        let (response, src) = {
-            match rv {
-                Ok((response, src)) => (response, src),
-                Err(err) => {
-                    hprintln!("sntp recv from error {:?}", err);
-                    continue;
-                }
-            }
-        };
-
-        /*
-        if dest != src {
-            return Err(Error::ResponseAddressMismatch);
-        }
-        */
-
-        if response != size_of::<NtpPacket>() {
-            // Err(Error::IncorrectPayload);
-            hprintln!("bad ntp rx size {} != {}", response, size_of::<NtpPacket>());
-            continue;
-        }
-
-        context.timestamp_gen.init();
-        let recv_timestamp = get_ntp_timestamp(&context.timestamp_gen);
-
-        // hprintln!("{:?}", recv_timestamp);
-        // let (response, src) i
-
-        let result = process_response(send_req_result, response_buf, recv_timestamp);
-        hprintln!("ntp process result: {:?}", result);
-
-        /*
-        // TODO(lucasw) this is locking up, maybe the socket recv_from within it is never returning
-        let rv = sntp_process_response(
-            remote_sock_addr,
-            &sock_wrapper,
-            context,
-            ntp_tx_result,
-        );
-
-        let now = Instant::now().as_millis() as f64 / 1e3;
-        hprintln!("[{:.3}] sntp process rv: {:?}", now, rv);
-
         match rv {
             Ok(new_rx_result) => {
                 // TODO(lucasw) store last rx_result and compare offsets
                 hprintln!(
                     "[{:?}] sntp offset: {:.2}s",
-                    now.as_millis(),
+                    now,
                     new_rx_result.offset as f64 / 1e6
                 );
 
@@ -337,7 +258,6 @@ async fn time_sync(stack: Stack<'static>, ntp_server_ip: [u8; 4]) -> ! {
         }
 
         // TODO(lucasw) broadcast latest ntp corrections out via a channel
-        */
     }
 }
 
