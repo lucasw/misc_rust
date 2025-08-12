@@ -12,6 +12,8 @@ use cortex_m_semihosting::hprintln;
 use embassy_executor::task;
 use embassy_net::udp::{PacketMetadata, UdpMetadata, UdpSocket};
 use embassy_net::{IpAddress, IpEndpoint, Ipv4Address, Stack};
+use embassy_sync::watch::Watch;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_time::{Instant, Timer};
 
 use sntpc::net::SocketAddr;
@@ -23,6 +25,9 @@ use sntpc::{
 use sntpc::{get_ntp_timestamp, process_response};
 
 include!(concat!(env!("OUT_DIR"), "/constants.rs"));
+
+// with more subscribers increase the '1' here
+pub static NTP_WATCH: Watch<CriticalSectionRawMutex, NtpResult, 1> = Watch::new();
 
 const ARENA_SIZE: usize = 128 * 1024;
 const MAX_SUPPORTED_ALIGN: usize = 4096;
@@ -112,6 +117,7 @@ impl NtpTimestampGenerator for TimestampGen {
 }
 
 pub struct EmbassyUdpSocketWrapper<'a, 'b> {
+    // TODO(lucasw) use something other than ref cell?
     pub socket: RefCell<&'b mut UdpSocket<'a>>,
 }
 
@@ -229,6 +235,14 @@ pub async fn get_sntpc_corrections(
 #[task]
 pub async fn time_sync(stack: Stack<'static>, ntp_server_ip: [u8; 4]) -> ! {
     hprintln!("setting up time sync");
+    let sender = NTP_WATCH.sender();
+    /*
+    let ntp_result0 = NtpResult::default();
+    // store something here
+    // TODO(lucasw) or maybe shouldn't so later now() calls will fail
+    sender.send(ntp_result0);
+    */
+
     // TODO(lucasw) this needs to be fixed
     // TODO(lucasw) don't want to pass stack into the time_sync function,
     // but the above buffers need to persist forever
@@ -273,15 +287,17 @@ pub async fn time_sync(stack: Stack<'static>, ntp_server_ip: [u8; 4]) -> ! {
         Timer::after_millis(1000).await;
 
         let rv = get_sntpc_corrections(&remote_sock_addr, &sock_wrapper, context).await;
-        let now = Instant::now().as_millis() as f64 / 1e3;
         match rv {
             Ok(new_rx_result) => {
                 // TODO(lucasw) store last rx_result and compare offsets
+                sender.send(new_rx_result);
+                /*
                 hprintln!(
                     "[{:?}] sntp offset: {:.2}s",
                     now,
                     new_rx_result.offset as f64 / 1e6
                 );
+                */
 
                 /*
                 let timestamp_msg = TimeStamp {
@@ -319,7 +335,14 @@ pub async fn time_sync(stack: Stack<'static>, ntp_server_ip: [u8; 4]) -> ! {
                 continue;
             }
         }
-
-        // TODO(lucasw) broadcast latest ntp corrections out via a channel
     }
+}
+
+/// get unix epoch seconds
+/// TODO(lucasw) return seconds and subsecond nanos in a tuple?
+pub fn now_f64(ntp_result: Option<NtpResult>) -> f64 {
+    let now = Instant::now().as_millis() as f64 / 1e3;
+    let Some(ntp_result) = ntp_result else { return now; };
+    let offset = ntp_result.offset as f64 / 1e6;
+    now + offset
 }

@@ -18,7 +18,8 @@ use embassy_time::Timer;
 // use smoltcp::socket::udp::UdpMetadata};
 use smoltcp::wire::{IpAddress, IpEndpoint};
 
-use nucleo_embassy::{LOCAL_IP, REMOTE_IP};
+use net_common::{Message, SmallArray};
+use nucleo_embassy::{LOCAL_IP, REMOTE_IP, now_f64};
 
 use static_cell::StaticCell;
 
@@ -42,7 +43,7 @@ bind_interrupts!(struct Irqs {
 
 #[main]
 async fn main(spawner: Spawner) {
-    hprintln!("embassy udp + led flashing start");
+    hprintln!("ntp, udp, & led with embassy");
 
     let p = embassy_stm32::init(Default::default());
     /*
@@ -131,8 +132,11 @@ async fn main(spawner: Spawner) {
     spawner.must_spawn(flash_led(led_orange, 1100));
     spawner.must_spawn(flash_led(led_red, 2250));
 
+    // TODO(lucasw) the rest of this could go into a task
+    let crc = crc::Crc::<u32>::new(&crc::CRC_32_ISCSI);
+    let mut ntp_receiver = nucleo_embassy::NTP_WATCH.receiver().unwrap();
+
     let mut rx_buf = [0; 4096];
-    let mut tx_buf = [0; 4096];
 
     let mut count = 0;
     loop {
@@ -150,13 +154,26 @@ async fn main(spawner: Spawner) {
                 }
             }
         };
-        tx_buf[0] = 0xff;
-        tx_buf[3] = (count / 256) as u8;
-        tx_buf[2] = count as u8;
-        tx_buf[6] = (num / 256) as u8;
-        tx_buf[5] = num as u8;
-        socket.send_to(&tx_buf[0..16], endpoint).await.unwrap();
-        // Timer::after_millis(200).await;
+
+        let now = now_f64(ntp_receiver.try_get());
+        let mut msg = SmallArray { stamp: now, ..Default::default() };
+        msg.stamp = now;
+        msg.data[0] = 0xff;
+        msg.data[3] = (count / 256) as u8;
+        msg.data[2] = count as u8;
+        msg.data[6] = (num / 256) as u8;
+        msg.data[5] = num as u8;
+        let data = Message::Array(msg);
+        let msg_bytes = {
+            match data.encode::<128>(crc.digest()) {
+                Ok(msg_bytes) => msg_bytes,
+                Err(err) => {
+                    hprintln!("{:?}", err);
+                    continue;
+                }
+            }
+        };
+        socket.send_to(&msg_bytes, endpoint).await.unwrap();
         count += 1;
     }
 }

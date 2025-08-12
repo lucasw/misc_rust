@@ -17,6 +17,7 @@ pub struct TimeStamp {
 
 #[derive(Clone, Serialize, Deserialize, Debug, Default)]
 pub struct SmallArray {
+    pub stamp: f64,
     pub data: [u8; 32],
 }
 
