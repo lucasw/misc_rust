@@ -9,10 +9,10 @@ use core::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 
 use cortex_m_semihosting::hprintln;
 
-use embassy_time::Instant;
-
-use embassy_net::udp::{UdpMetadata, UdpSocket};
-use embassy_net::{IpAddress, IpEndpoint, Ipv4Address};
+use embassy_executor::task;
+use embassy_net::udp::{PacketMetadata, UdpMetadata, UdpSocket};
+use embassy_net::{IpAddress, IpEndpoint, Ipv4Address, Stack};
+use embassy_time::{Instant, Timer};
 
 use sntpc::net::SocketAddr;
 use sntpc::sync::sntp_send_request;
@@ -224,4 +224,102 @@ pub async fn get_sntpc_corrections(
     ntp_tx_result,
     );
     */
+}
+
+#[task]
+pub async fn time_sync(stack: Stack<'static>, ntp_server_ip: [u8; 4]) -> ! {
+    hprintln!("setting up time sync");
+    // TODO(lucasw) this needs to be fixed
+    // TODO(lucasw) don't want to pass stack into the time_sync function,
+    // but the above buffers need to persist forever
+    let mut rx_meta0: [PacketMetadata; 16] = [PacketMetadata::EMPTY; 16];
+    let mut rx_buffer0: [u8; 4096] = [0; 4096];
+    let mut tx_meta0: [PacketMetadata; 16] = [PacketMetadata::EMPTY; 16];
+    let mut tx_buffer0: [u8; 4096] = [0; 4096];
+
+    let mut socket = UdpSocket::new(
+        stack,
+        &mut rx_meta0,
+        &mut rx_buffer0,
+        &mut tx_meta0,
+        &mut tx_buffer0,
+    );
+
+    // TODO(lucasw) this port is never used (?), but the socket needs to be bound to something
+    let local_port = 35201;
+    socket.bind(local_port).unwrap();
+
+    let ntp_port = 123;
+    let remote_sock_addr = sntpc::net::SocketAddr::new(
+        core::net::IpAddr::V4(core::net::Ipv4Addr::new(
+            ntp_server_ip[0],
+            ntp_server_ip[1],
+            ntp_server_ip[2],
+            ntp_server_ip[3],
+        )),
+        ntp_port,
+    );
+
+    let timestamp_gen = TimestampGen::default();
+    let context = NtpContext::new(timestamp_gen);
+
+    // TODO(lucasw) do this before calling time sync, pass in the wrapper?
+    let sock_wrapper = EmbassyUdpSocketWrapper {
+        socket: (&mut socket).into(),
+    };
+
+    hprintln!("starting time sync with ntp server: {:?}", remote_sock_addr);
+    loop {
+        Timer::after_millis(1000).await;
+
+        let rv = get_sntpc_corrections(&remote_sock_addr, &sock_wrapper, context).await;
+        let now = Instant::now().as_millis() as f64 / 1e3;
+        match rv {
+            Ok(new_rx_result) => {
+                // TODO(lucasw) store last rx_result and compare offsets
+                hprintln!(
+                    "[{:?}] sntp offset: {:.2}s",
+                    now,
+                    new_rx_result.offset as f64 / 1e6
+                );
+
+                /*
+                let timestamp_msg = TimeStamp {
+                    counter,
+                    // TODO(lucasw) these are for the timestamp received from the other
+                    // computer via a TimeStamp message, maybe get rid of them?
+                    seconds: 0,
+                    nanoseconds: 0,
+                    stamp_ms: now,
+                    ntp_offset: new_rx_result.offset,
+                    ntp_seconds: new_rx_result.seconds,
+                    ntp_seconds_fraction: new_rx_result.seconds_fraction,
+                    ntp_roundtrip: new_rx_result.roundtrip,
+                };
+                let tx_rv = send_message(
+                    &Message::TimeStamp(timestamp_msg),
+                    &crc,
+                    socket_handle,
+                    remote_endpoint,
+                );
+                match tx_rv {
+                    Ok(num_bytes) => {}
+                    Err(Error::Smoltcp(smoltcp::Error::Exhausted)) => {
+                        hprintln!("exhausted");
+                    }
+                    Err(e) => {
+                        hprintln!("UdpSocket::send error: {:?}", e);
+                    }
+                }
+                */
+            }
+            Err(e) => {
+                hprintln!("sntp response error {:?}", e);
+                // TODO(lucasw) how to recover, just wait and try again?
+                continue;
+            }
+        }
+
+        // TODO(lucasw) broadcast latest ntp corrections out via a channel
+    }
 }
