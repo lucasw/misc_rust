@@ -4,11 +4,16 @@ use postcard::{from_bytes_crc32, to_vec_crc32};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize, Debug, Default)]
+pub struct Epoch {
+    pub secs: u64,
+    pub nanos: u32,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, Default)]
 pub struct TimeStamp {
+    pub epoch: Epoch,
     pub counter: u64,
-    pub seconds: u64,
-    pub nanoseconds: u32,
-    pub stamp_ms: i64,
+    pub tick_ms: u64,
     pub ntp_offset: i64,
     pub ntp_seconds: u32,
     pub ntp_seconds_fraction: u32,
@@ -17,7 +22,7 @@ pub struct TimeStamp {
 
 #[derive(Clone, Serialize, Deserialize, Debug, Default)]
 pub struct SmallArray {
-    pub stamp: f64,
+    pub epoch: Epoch,
     pub data: [u8; 32],
 }
 

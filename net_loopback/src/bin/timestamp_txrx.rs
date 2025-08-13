@@ -17,7 +17,7 @@ netcat -ul 34201 | hexdump -C
 */
 
 use clap::{Command, arg};
-use net_common::{Message, TimeStamp};
+use net_common::{Epoch, Message, TimeStamp};
 use std::net::UdpSocket;
 use std::time::Duration;
 
@@ -59,7 +59,7 @@ fn main() -> std::io::Result<()> {
     // let mut array = Message::Array(array);
     */
 
-    let delay_ms = 10;
+    let delay_ms = 500;
     let accum_num = 1000 / delay_ms;
     let mut elapsed_accum = 0.0;
 
@@ -70,10 +70,12 @@ fn main() -> std::io::Result<()> {
             .expect("time went backwards");
         // if let Message::TimeStamp(ref mut data) = tx_timestamp
         let tx_timestamp = Message::TimeStamp(TimeStamp {
+            epoch: Epoch {
+                secs: tx_stamp.as_secs(),
+                nanos: tx_stamp.subsec_nanos(),
+            },
             counter,
-            seconds: tx_stamp.as_secs(),
-            nanoseconds: tx_stamp.subsec_nanos(),
-            stamp_ms: 0,
+            tick_ms: 0,
             ..Default::default()
         });
         counter += 1;
@@ -103,7 +105,7 @@ fn main() -> std::io::Result<()> {
                             elapsed_accum += elapsed;
                             if counter % accum_num == 0 {
                                 println!(
-                                    "[{rx_stamp:?}], elapsed avg {:.2}ms, cur {:.3}ms, received data {data:?}, (sent {tx_timestamp:?})",
+                                    "[{rx_stamp:.03?}], elapsed avg {:.2}ms, cur {:.3}ms, received data {data:?}, (sent {tx_timestamp:?})",
                                     (elapsed_accum / accum_num as f64) * 1e3,
                                     elapsed * 1e3
                                 );

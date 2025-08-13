@@ -12,9 +12,11 @@ use cortex_m_semihosting::hprintln;
 use embassy_executor::task;
 use embassy_net::udp::{PacketMetadata, UdpMetadata, UdpSocket};
 use embassy_net::{IpAddress, IpEndpoint, Ipv4Address, Stack};
-use embassy_sync::watch::Watch;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::watch::Watch;
 use embassy_time::{Instant, Timer};
+
+use net_common::Epoch;
 
 use sntpc::net::SocketAddr;
 use sntpc::sync::sntp_send_request;
@@ -306,7 +308,7 @@ pub async fn time_sync(stack: Stack<'static>, ntp_server_ip: [u8; 4]) -> ! {
                     // computer via a TimeStamp message, maybe get rid of them?
                     seconds: 0,
                     nanoseconds: 0,
-                    stamp_ms: now,
+                    tick_ms: now,
                     ntp_offset: new_rx_result.offset,
                     ntp_seconds: new_rx_result.seconds,
                     ntp_seconds_fraction: new_rx_result.seconds_fraction,
@@ -338,11 +340,27 @@ pub async fn time_sync(stack: Stack<'static>, ntp_server_ip: [u8; 4]) -> ! {
     }
 }
 
+const MS_PER_S: u64 = 1_000;
+const US_PER_S: u64 = 1_000_000;
+const NS_PER_S: u64 = 1_000_000_000;
+
 /// get unix epoch seconds
 /// TODO(lucasw) return seconds and subsecond nanos in a tuple?
-pub fn now_f64(ntp_result: Option<NtpResult>) -> f64 {
-    let now = Instant::now().as_millis() as f64 / 1e3;
-    let Some(ntp_result) = ntp_result else { return now; };
-    let offset = ntp_result.offset as f64 / 1e6;
-    now + offset
+pub fn now(ntp_result: Option<NtpResult>) -> (Epoch, Instant) {
+    let tick_instant = Instant::now();
+    let mut epoch = Epoch {
+        secs: tick_instant.as_secs(),
+        nanos: ((tick_instant.as_millis() - tick_instant.as_secs() * MS_PER_S) * US_PER_S) as u32,
+    };
+    let Some(ntp_result) = ntp_result else {
+        return (epoch, tick_instant);
+    };
+    let ntp_us_offset = ntp_result.offset;
+    let offset_secs = ntp_us_offset / US_PER_S as i64;
+    epoch.secs += offset_secs as u64;
+    epoch.nanos += ((ntp_us_offset - (offset_secs * US_PER_S as i64)) * MS_PER_S as i64) as u32;
+    let more_secs = epoch.nanos / NS_PER_S as u32;
+    epoch.secs += more_secs as u64;
+    epoch.nanos -= more_secs * NS_PER_S as u32;
+    (epoch, tick_instant)
 }

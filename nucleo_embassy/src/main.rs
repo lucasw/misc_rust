@@ -18,8 +18,8 @@ use embassy_time::Timer;
 // use smoltcp::socket::udp::UdpMetadata};
 use smoltcp::wire::{IpAddress, IpEndpoint};
 
-use net_common::{Message, SmallArray};
-use nucleo_embassy::{LOCAL_IP, REMOTE_IP, now_f64};
+use net_common::{Message, /* SmallArray, */ TimeStamp};
+use nucleo_embassy::{LOCAL_IP, REMOTE_IP, now};
 
 use static_cell::StaticCell;
 
@@ -138,10 +138,10 @@ async fn main(spawner: Spawner) {
 
     let mut rx_buf = [0; 4096];
 
-    let mut count = 0;
+    let mut counter = 0;
     loop {
-        let num = {
-            hprintln!("wait for message on {:?} {}", local_ip_addr, local_port);
+        let _num = {
+            // hprintln!("{} wait for message on {:?} {}", counter, local_ip_addr, local_port);
             match socket.recv_from(&mut rx_buf).await {
                 Ok((num, _meta)) => {
                     // hprintln!("rx {}", num);
@@ -155,26 +155,39 @@ async fn main(spawner: Spawner) {
             }
         };
 
-        let now = now_f64(ntp_receiver.try_get());
-        let mut msg = SmallArray { stamp: now, ..Default::default() };
-        msg.stamp = now;
-        msg.data[0] = 0xff;
-        msg.data[3] = (count / 256) as u8;
-        msg.data[2] = count as u8;
-        msg.data[6] = (num / 256) as u8;
-        msg.data[5] = num as u8;
-        let data = Message::Array(msg);
-        let msg_bytes = {
-            match data.encode::<128>(crc.digest()) {
-                Ok(msg_bytes) => msg_bytes,
-                Err(err) => {
-                    hprintln!("{:?}", err);
-                    continue;
+        let ntp_result = ntp_receiver.try_get();
+        if let Some(ntp_result) = ntp_result {
+            let (epoch, tick_ms) = now(Some(ntp_result));
+            let msg = TimeStamp {
+                epoch,
+                counter,
+                tick_ms: tick_ms.as_millis(),
+                ntp_offset: ntp_result.offset,
+                ntp_seconds: ntp_result.seconds,
+                ntp_seconds_fraction: ntp_result.seconds_fraction,
+                ntp_roundtrip: ntp_result.roundtrip,
+            };
+            /*
+            let mut msg = SmallArray { epoch: now, ..Default::default() };
+            msg.data[0] = 0xff;
+            msg.data[3] = (count / 256) as u8;
+            msg.data[2] = count as u8;
+            msg.data[6] = (num / 256) as u8;
+            msg.data[5] = num as u8;
+            */
+            let data = Message::TimeStamp(msg);
+            let msg_bytes = {
+                match data.encode::<128>(crc.digest()) {
+                    Ok(msg_bytes) => msg_bytes,
+                    Err(err) => {
+                        hprintln!("{:?}", err);
+                        continue;
+                    }
                 }
-            }
-        };
-        socket.send_to(&msg_bytes, endpoint).await.unwrap();
-        count += 1;
+            };
+            socket.send_to(&msg_bytes, endpoint).await.unwrap();
+            counter += 1;
+        }
     }
 }
 
