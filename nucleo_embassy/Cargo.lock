@@ -1008,8 +1008,8 @@ dependencies = [
 
 [[package]]
 name = "sntpc"
-version = "0.6.0"
-source = "git+https://github.com/lucasw/sntpc?branch=embassy_process_response#84685704d888ae17ee9553a226f2b22fc9b6c19d"
+version = "0.6.1"
+source = "git+https://github.com/lucasw/sntpc?branch=embassy_process_response#5eec1bcdf6dd13e5affc38d5d4c4b81f69aa96fd"
 dependencies = [
  "cfg-if",
  "miniloop",
