@@ -1,7 +1,6 @@
 #![no_std]
 
 use core::alloc::{GlobalAlloc, Layout};
-use core::cell::RefCell;
 use core::cell::UnsafeCell;
 // use core::net::{IpAddr, Ipv4Addr};
 use core::ptr::null_mut;
@@ -118,12 +117,13 @@ impl NtpTimestampGenerator for TimestampGen {
     }
 }
 
-pub struct EmbassyUdpSocketWrapper<'a, 'b> {
+pub struct EmbassyUdpSocketWrapper<'a> {
     // TODO(lucasw) use something other than ref cell?
-    pub socket: RefCell<&'b mut UdpSocket<'a>>,
+    // pub socket: RefCell<&'b mut UdpSocket<'a>>,
+    pub socket: UdpSocket<'a>,
 }
 
-impl NtpUdpSocket for EmbassyUdpSocketWrapper<'_, '_> {
+impl NtpUdpSocket for EmbassyUdpSocketWrapper<'_> {
     async fn send_to(&self, buf: &[u8], addr: SocketAddr) -> Result<usize> {
         let endpoint = match addr {
             SocketAddr::V4(v4_ip_and_port) => {
@@ -150,7 +150,7 @@ impl NtpUdpSocket for EmbassyUdpSocketWrapper<'_, '_> {
             meta: smoltcp::phy::PacketMeta::default(),
         };
 
-        let rv = self.socket.borrow_mut().send_to(buf, udp_endpoint).await;
+        let rv = self.socket.send_to(buf, udp_endpoint).await;
         if rv.is_ok() {
             return Ok(buf.len());
         }
@@ -164,7 +164,7 @@ impl NtpUdpSocket for EmbassyUdpSocketWrapper<'_, '_> {
         buf: &mut [u8],
         // ) -> Result<(usize, SocketAddr), sntpc::Error> {
     ) -> Result<(usize, SocketAddr)> {
-        let result = self.socket.borrow_mut().recv_from(&mut buf[..]).await;
+        let result = self.socket.recv_from(&mut buf[..]).await;
 
         if let Ok((size, meta)) = result {
             let sockaddr = SocketAddr::new(meta.endpoint.addr.into(), meta.endpoint.port);
@@ -179,7 +179,7 @@ impl NtpUdpSocket for EmbassyUdpSocketWrapper<'_, '_> {
 // TODO(lucasw) move to sntpc fork
 pub async fn get_sntpc_corrections(
     remote_sock_addr: &sntpc::net::SocketAddr,
-    sock_wrapper: &EmbassyUdpSocketWrapper<'_, '_>,
+    sock_wrapper: &EmbassyUdpSocketWrapper<'_>,
     mut context: NtpContext<TimestampGen>,
 ) -> Result<NtpResult> {
     // TODO(lucasw) if any unhandled ntp results are sitting in the buffer this
@@ -281,7 +281,7 @@ pub async fn time_sync(stack: Stack<'static>, ntp_server_ip: [u8; 4]) -> ! {
 
     // TODO(lucasw) do this before calling time sync, pass in the wrapper?
     let sock_wrapper = EmbassyUdpSocketWrapper {
-        socket: (&mut socket).into(),
+        socket,
     };
 
     hprintln!("starting time sync with ntp server: {:?}", remote_sock_addr);
