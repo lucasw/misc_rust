@@ -99,8 +99,7 @@ async fn main(spawner: Spawner) {
         embassy_net::new(device, config, RESOURCES.init(StackResources::new()), seed);
     spawner.spawn(net_task(runner)).unwrap();
 
-    // TODO(lucasw) is it okay to clone the stack?
-    spawner.must_spawn(nucleo_embassy::time_sync(stack.clone(), REMOTE_IP));
+    spawner.must_spawn(nucleo_embassy::time_sync(stack, REMOTE_IP));
 
     let mut rx_meta = [PacketMetadata::EMPTY; 16];
     let mut rx_buffer = [0; 4096];
