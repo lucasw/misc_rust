@@ -345,12 +345,11 @@ fn main() -> ! {
                     */
 
                     let timestamp_msg = TimeStamp {
-                        counter,
                         // TODO(lucasw) these are for the timestamp received from the other
                         // computer via a TimeStamp message, maybe get rid of them?
-                        seconds: 0,
-                        nanoseconds: 0,
-                        stamp_ms: now,
+                        epoch: net_common::Epoch { secs: 0, nanos: 0 },
+                        counter,
+                        tick_ms: now as u64,
                         ntp_offset: new_rx_result.offset,
                         ntp_seconds: new_rx_result.seconds,
                         ntp_seconds_fraction: new_rx_result.seconds_fraction,
