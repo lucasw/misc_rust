@@ -1,0 +1,8 @@
+[package]
+name = "uom_quantity_example"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+typenum = "1.19.0"
+uom = "0.37.0"
