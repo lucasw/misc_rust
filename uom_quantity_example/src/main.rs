@@ -48,6 +48,14 @@ impl TurnRadius {
 struct Curvature(InverseMeter);
 
 impl Curvature {
+    fn new<T>(value: V) -> Self
+    where
+        T: uom::si::length::Unit + uom::Conversion<V, T = V>,
+    {
+        // TODO(lucasw) need inverse_meter to set directly
+        TurnRadius(Length::new::<T>(1.0 / value)).to_curvature()
+    }
+
     pub fn zero<T>() -> Self
     where
         T: uom::si::length::Unit + uom::Conversion<V, T = V>,
@@ -73,6 +81,11 @@ fn main() {
         let curvature2: Curvature = turn_radius2.to_curvature();
         let turn_radius2b = TurnRadius::from_curvature(&curvature2);
         println!("turn radius {turn_radius2:?} -> curvature {curvature2:?} -> {turn_radius2b:?}");
+    }
+
+    for curvature_value in [10.0, -10.0, 0.0, f64::INFINITY, f64::NEG_INFINITY] {
+        let curvature: Curvature = Curvature::new::<meter>(curvature_value);
+        println!("{curvature_value} -> curvature {curvature:?}");
     }
 
     let turn_radius = TurnRadius::zero();
