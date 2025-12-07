@@ -2,6 +2,7 @@ use typenum::{N1, Z0};
 use uom::{
     Kind,
     num_traits::Zero,
+    quantity,
     si::{
         ISQ, Quantity, SI,
         f64::{Length, V},
@@ -9,7 +10,28 @@ use uom::{
     },
 };
 
-type InverseMeter = Quantity<ISQ<N1, Z0, Z0, Z0, Z0, Z0, Z0, dyn Kind>, SI<V>, V>;
+type InverseLength = Quantity<ISQ<N1, Z0, Z0, Z0, Z0, Z0, Z0, dyn Kind>, SI<V>, V>;
+
+/*
+quantity! {
+    /// Inverse meter (base unit radian per second, s⁻¹).
+    quantity: InverseLength; "inverse meter";
+    /// Dimension of angular velocity, T⁻¹ (base unit radian per second, s⁻¹).
+    dimension: ISQ<
+        N1,     // length
+        Z0,     // mass
+        Z0,     // time
+        Z0,     // electric current
+        Z0,     // thermodynamic temperature
+        Z0,     // amount of substance
+        Z0>;    // luminous intensity
+    kind: dyn uom::si::marker::AngleKind;
+    units {
+        /// Derived unit of angular velocity.
+        @per_meter: 1.0_E0; "/m", "meter", "per meter";
+    }
+}
+*/
 
 // TODO(lucasw) curvature has a special meaing that shouldn't be mixed up with some
 // other application of inverse meter, need to wrap it in a struct to enforce that?
@@ -45,7 +67,7 @@ impl TurnRadius {
 }
 
 #[derive(Debug)]
-struct Curvature(InverseMeter);
+struct Curvature(InverseLength);
 
 impl Curvature {
     fn new<T>(value: V) -> Self
@@ -67,7 +89,7 @@ impl Curvature {
 fn main() {
     // not using wrapper types
     let turn_radius0 = Length::new::<meter>(4.0);
-    let curvature0: InverseMeter = 1.0 / turn_radius0;
+    let curvature0: InverseLength = 1.0 / turn_radius0;
     println!("turn radius {turn_radius0:?} -> curvature {curvature0:?}");
 
     let _turn_radius1 = TurnRadius::new::<meter>(10.0);
